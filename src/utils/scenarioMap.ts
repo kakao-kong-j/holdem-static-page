@@ -1,9 +1,12 @@
 import { POSITIONS } from '../constants';
 import type { StackData } from '../types';
 
+export type ScenarioCategory = '상대 오픈 대응' | '내 오픈 후 대응';
+
 export interface Scenario {
   chartName: string;
   label: string;
+  category: ScenarioCategory;
 }
 
 const ALL_POS_ORDER = [...POSITIONS, 'BB'] as const;
@@ -33,62 +36,71 @@ interface ParsedChart {
   heroes: string[];
   villains: string[];
   label: string;
+  category: ScenarioCategory;
 }
 
 function parseChartName(name: string): ParsedChart | null {
+  // Solo RFI — skip (Open Range 뷰에서 처리)
   const rfiMatch = name.match(/^(.+) RFI$/);
   if (rfiMatch && !name.includes('vs') && !name.includes('BvB')) {
-    return { heroes: expandPositions(rfiMatch[1]), villains: [], label: '오픈 (RFI)' };
+    return null;
   }
 
-  if (name === 'SB RFI BvB') {
-    return { heroes: ['SB'], villains: ['BB'], label: 'SB 오픈 BvB' };
-  }
+  // BvB — 데이터 검증 필요, 현재 제외
+  if (name === 'SB RFI BvB') return null;
 
+  // RFI vs Allin: 내가 오픈 후 상대 올인
   const allinMatch = name.match(/^(.+) RFI vs (.+) Allin$/);
   if (allinMatch) {
     return {
       heroes: expandPositions(allinMatch[1]),
       villains: expandPositions(allinMatch[2]),
-      label: '오픈 후 올인 대응',
+      label: '올인 대응',
+      category: '내 오픈 후 대응',
     };
   }
 
+  if (name === 'SB RFI vs BB 3bet') return null;
+
+  // RFI vs 3bet: 내가 오픈 후 상대 3bet (100BB)
   const threebetMatch = name.match(/^(.+) vs (.+) 3bet$/);
   if (threebetMatch) {
     const openerRaw = threebetMatch[1].replace(' RFI', '');
     return {
       heroes: expandPositions(openerRaw),
       villains: expandPositions(threebetMatch[2]),
-      label: '오픈 후 3bet 대응',
+      label: '3bet 대응',
+      category: '내 오픈 후 대응',
     };
   }
 
   const sbLimpMatch = name.match(/^SB Limp vs BB (.+)$/);
-  if (sbLimpMatch) {
-    return { heroes: ['SB'], villains: ['BB'], label: `SB 림프 후 BB ${sbLimpMatch[1]} 대응` };
-  }
+  if (sbLimpMatch) return null;
 
   const bbVsSbMatch = name.match(/^BB vs SB (.+)$/);
-  if (bbVsSbMatch) {
-    return { heroes: ['BB'], villains: ['SB'], label: `SB ${bbVsSbMatch[1]} 대응` };
-  }
+  if (bbVsSbMatch) return null;
 
+  // Facing RFI (15/25/40BB): 상대가 오픈, 내가 대응
   const facingRfiMatch = name.match(/^(.+) vs (.+) RFI$/);
   if (facingRfiMatch) {
     return {
       heroes: expandPositions(facingRfiMatch[1]),
       villains: expandPositions(facingRfiMatch[2]),
-      label: '상대 오픈 대응',
+      label: '오픈 대응',
+      category: '상대 오픈 대응',
     };
   }
 
+  if (name === 'BB vs SB') return null;
+
+  // Facing RFI (100BB): 상대가 오픈, 내가 대응
   const facingMatch = name.match(/^(.+) vs (.+)$/);
   if (facingMatch) {
     return {
       heroes: expandPositions(facingMatch[1]),
       villains: expandPositions(facingMatch[2]),
-      label: '상대 오픈 대응',
+      label: '오픈 대응',
+      category: '상대 오픈 대응',
     };
   }
 
@@ -97,47 +109,69 @@ function parseChartName(name: string): ParsedChart | null {
 
 export interface PositionScenarios {
   map: Map<string, Map<string, Scenario[]>>;
-  heroPositions: string[];
+  categories: ScenarioCategory[];
 }
 
 export function buildScenarioMap(stackData: StackData): PositionScenarios {
   const map = new Map<string, Map<string, Scenario[]>>();
+  const categorySet = new Set<ScenarioCategory>();
 
   for (const chartName of Object.keys(stackData)) {
     const parsed = parseChartName(chartName);
     if (!parsed) continue;
 
+    categorySet.add(parsed.category);
+
     for (const hero of parsed.heroes) {
       if (!map.has(hero)) map.set(hero, new Map());
       const villainMap = map.get(hero)!;
 
-      if (parsed.villains.length === 0) {
-        const key = '-';
-        if (!villainMap.has(key)) villainMap.set(key, []);
-        villainMap.get(key)!.push({ chartName, label: parsed.label });
-      } else {
-        for (const villain of parsed.villains) {
-          if (!villainMap.has(villain)) villainMap.set(villain, []);
-          villainMap.get(villain)!.push({ chartName, label: parsed.label });
-        }
+      for (const villain of parsed.villains) {
+        if (!villainMap.has(villain)) villainMap.set(villain, []);
+        villainMap.get(villain)!.push({ chartName, label: parsed.label, category: parsed.category });
       }
     }
   }
 
-  const heroPositions = (ALL_POS_ORDER as readonly string[]).filter(p => map.has(p));
-  return { map, heroPositions };
+  const CATEGORY_ORDER: ScenarioCategory[] = ['상대 오픈 대응', '내 오픈 후 대응'];
+  const categories = CATEGORY_ORDER.filter(c => categorySet.has(c));
+
+  return { map, categories };
 }
 
-export function getVillainOptions(scenarioMap: PositionScenarios, hero: string): string[] {
+export function getHeroPositions(
+  scenarioMap: PositionScenarios,
+  category: ScenarioCategory,
+): string[] {
+  return (ALL_POS_ORDER as readonly string[]).filter(p => {
+    const villainMap = scenarioMap.map.get(p);
+    if (!villainMap) return false;
+    for (const scenarios of villainMap.values()) {
+      if (scenarios.some(s => s.category === category)) return true;
+    }
+    return false;
+  });
+}
+
+export function getVillainOptions(
+  scenarioMap: PositionScenarios,
+  hero: string,
+  category: ScenarioCategory,
+): string[] {
   const villainMap = scenarioMap.map.get(hero);
   if (!villainMap) return [];
-  return (ALL_POS_ORDER as readonly string[]).filter(p => p !== '-' && villainMap.has(p));
+  return (ALL_POS_ORDER as readonly string[]).filter(p => {
+    const scenarios = villainMap.get(p);
+    return scenarios?.some(s => s.category === category) ?? false;
+  });
 }
 
-export function getScenarios(scenarioMap: PositionScenarios, hero: string, villain: string): Scenario[] {
-  return scenarioMap.map.get(hero)?.get(villain) || [];
-}
-
-export function getRfiScenarios(scenarioMap: PositionScenarios, hero: string): Scenario[] {
-  return scenarioMap.map.get(hero)?.get('-') || [];
+export function getScenarios(
+  scenarioMap: PositionScenarios,
+  hero: string,
+  villain: string,
+  category: ScenarioCategory,
+): Scenario[] {
+  const all = scenarioMap.map.get(hero)?.get(villain) || [];
+  return all.filter(s => s.category === category);
 }

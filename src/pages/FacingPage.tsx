@@ -5,9 +5,10 @@ import { ACTION_COLORS } from '../constants';
 import { buildHandAction, forEachHand } from '../utils/hand';
 import {
   buildScenarioMap,
+  getHeroPositions,
   getVillainOptions,
   getScenarios,
-  getRfiScenarios,
+  type ScenarioCategory,
   type Scenario,
 } from '../utils/scenarioMap';
 import type { StackData } from '../types';
@@ -19,48 +20,54 @@ interface Props {
 export function FacingPage({ stackData }: Props) {
   const scenarioMap = useMemo(() => buildScenarioMap(stackData), [stackData]);
 
+  const [category, setCategory] = useState<ScenarioCategory>('상대 오픈 대응');
   const [hero, setHero] = useState('');
   const [villain, setVillain] = useState('');
   const [selectedChart, setSelectedChart] = useState('');
 
-  // hero 초기화 (마운트 시 또는 stackData 변경 시)
+  // 카테고리 유효성
   useEffect(() => {
-    if (!scenarioMap.heroPositions.includes(hero)) {
-      setHero(scenarioMap.heroPositions[0] || '');
+    if (!scenarioMap.categories.includes(category)) {
+      setCategory(scenarioMap.categories[0]);
     }
-  }, [scenarioMap, hero]);
+  }, [scenarioMap, category]);
 
-  // hero 변경 → villain + selectedChart 일괄 리셋 (cascade 제거)
-  useEffect(() => {
-    const opts = getVillainOptions(scenarioMap, hero);
-    const newVillain = opts.length > 0 ? opts[0] : '';
-    setVillain(newVillain);
-
-    const newScenarios = newVillain
-      ? getScenarios(scenarioMap, hero, newVillain)
-      : getRfiScenarios(scenarioMap, hero);
-    setSelectedChart(newScenarios[0]?.chartName ?? '');
-  }, [hero, scenarioMap]);
-
-  // villain 변경 → selectedChart 리셋
-  const villainOptions = useMemo(
-    () => (hero ? getVillainOptions(scenarioMap, hero) : []),
-    [scenarioMap, hero]
+  // 카테고리별 히어로 목록
+  const heroPositions = useMemo(
+    () => getHeroPositions(scenarioMap, category),
+    [scenarioMap, category]
   );
 
-  const scenarios: Scenario[] = useMemo(() => {
-    if (!hero) return [];
-    if (villain) return getScenarios(scenarioMap, hero, villain);
-    return getRfiScenarios(scenarioMap, hero);
-  }, [scenarioMap, hero, villain]);
+  // 카테고리 변경 → 히어로 리셋
+  useEffect(() => {
+    if (!heroPositions.includes(hero)) {
+      setHero(heroPositions[0] ?? '');
+    }
+  }, [heroPositions, hero]);
 
-  // villain이 사용자에 의해 변경될 때 chart 리셋
+  // 히어로별 빌런 목록
+  const villainOptions = useMemo(
+    () => (hero ? getVillainOptions(scenarioMap, hero, category) : []),
+    [scenarioMap, hero, category]
+  );
+
+  // 히어로 변경 → 빌런 + 차트 리셋
+  useEffect(() => {
+    const newVillain = villainOptions[0] ?? '';
+    setVillain(newVillain);
+    const s = newVillain ? getScenarios(scenarioMap, hero, newVillain, category) : [];
+    setSelectedChart(s[0]?.chartName ?? '');
+  }, [hero, villainOptions, scenarioMap, category]);
+
+  const scenarios: Scenario[] = useMemo(() => {
+    if (!hero || !villain) return [];
+    return getScenarios(scenarioMap, hero, villain, category);
+  }, [scenarioMap, hero, villain, category]);
+
   const handleVillainChange = (v: string) => {
     setVillain(v);
-    const newScenarios = v
-      ? getScenarios(scenarioMap, hero, v)
-      : getRfiScenarios(scenarioMap, hero);
-    setSelectedChart(newScenarios[0]?.chartName ?? '');
+    const s = v ? getScenarios(scenarioMap, hero, v, category) : [];
+    setSelectedChart(s[0]?.chartName ?? '');
   };
 
   const chartData = stackData[selectedChart];
@@ -92,6 +99,24 @@ export function FacingPage({ stackData }: Props) {
 
   return (
     <div className="flex flex-col items-center">
+      {/* 상황 탭 */}
+      <div className="flex gap-1.5 mb-4">
+        {scenarioMap.categories.map(c => (
+          <button
+            key={c}
+            onClick={() => setCategory(c)}
+            className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+              category === c
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-300'
+            }`}
+          >
+            {c}
+          </button>
+        ))}
+      </div>
+
+      {/* 포지션 선택 */}
       <div className="flex items-center gap-3 mb-4 flex-wrap justify-center">
         <div className="flex items-center gap-2">
           <label className="text-sm text-gray-400 font-medium">나</label>
@@ -100,7 +125,7 @@ export function FacingPage({ stackData }: Props) {
             onChange={e => setHero(e.target.value)}
             className={selectClass}
           >
-            {scenarioMap.heroPositions.map(p => (
+            {heroPositions.map(p => (
               <option key={p} value={p}>{p}</option>
             ))}
           </select>
@@ -115,7 +140,6 @@ export function FacingPage({ stackData }: Props) {
             onChange={e => handleVillainChange(e.target.value)}
             className={selectClass}
           >
-            <option value="">없음 (내가 오픈)</option>
             {villainOptions.map(p => (
               <option key={p} value={p}>{p}</option>
             ))}
@@ -123,6 +147,7 @@ export function FacingPage({ stackData }: Props) {
         </div>
       </div>
 
+      {/* 시나리오가 여러 개일 때 하위 선택 */}
       {scenarios.length > 1 && (
         <div className="flex flex-wrap gap-1.5 mb-4 justify-center">
           {scenarios.map(s => (
@@ -158,9 +183,7 @@ export function FacingPage({ stackData }: Props) {
         </>
       ) : (
         <div className="text-gray-500 py-12">
-          {selectedChart
-            ? `차트를 찾을 수 없습니다: "${selectedChart}"`
-            : '포지션을 선택해주세요'}
+          포지션을 선택해주세요
         </div>
       )}
     </div>
