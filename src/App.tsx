@@ -4,13 +4,15 @@ import { useChartData } from './hooks/useChartData';
 import { PasswordGate } from './components/PasswordGate';
 import { StackTabs } from './components/StackTabs';
 import { OpenRangePage } from './pages/OpenRangePage';
+import { SbOpenPage } from './pages/SbOpenPage';
 import { FacingPage } from './pages/FacingPage';
 import type { StackSize } from './types';
 
-type View = 'open-range' | 'facing';
+type View = 'open-range' | 'sb-open' | 'facing';
 
 const VIEWS: { value: View; label: string }[] = [
   { value: 'open-range', label: 'Open Range' },
+  { value: 'sb-open', label: 'SB Open' },
   { value: 'facing', label: 'Facing Charts' },
 ];
 
@@ -68,11 +70,9 @@ function App() {
         <StackTabs selected={stack} onChange={setStack} />
       </div>
 
-      {view === 'open-range' ? (
-        <OpenRangePage stackData={stackData} />
-      ) : (
-        <FacingPage stackData={stackData} />
-      )}
+      {view === 'open-range' && <OpenRangePage stackData={stackData} />}
+      {view === 'sb-open' && <SbOpenPage stackData={stackData} />}
+      {view === 'facing' && <FacingPage stackData={stackData} />}
     </div>
   );
 }

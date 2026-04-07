@@ -91,8 +91,6 @@ function parseChartName(name: string): ParsedChart | null {
     };
   }
 
-  if (name === 'BB vs SB') return null;
-
   // Facing RFI (100BB): 상대가 오픈, 내가 대응
   const facingMatch = name.match(/^(.+) vs (.+)$/);
   if (facingMatch) {

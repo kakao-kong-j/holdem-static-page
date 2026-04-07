@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { RangeGrid } from '../components/RangeGrid';
 import { Legend, type LegendItem } from '../components/Legend';
-import { POSITIONS, POSITION_COLORS } from '../constants';
+import { OPEN_RANGE_POSITIONS, POSITION_COLORS } from '../constants';
 import { buildOpenRangeData, forEachHand } from '../utils/hand';
 import type { StackData, ColorDef } from '../types';
 
@@ -10,7 +10,7 @@ interface Props {
 }
 
 const positionColorMap: Record<string, ColorDef> = Object.fromEntries([
-  ...POSITIONS.map(p => [p, { bg: POSITION_COLORS[p], text: '#fff', label: p }]),
+  ...OPEN_RANGE_POSITIONS.map(p => [p, { bg: POSITION_COLORS[p], text: '#fff', label: p }]),
   ['fold', { bg: 'transparent', text: '#6b7280', label: '-' }],
 ]);
 
@@ -19,7 +19,7 @@ export function OpenRangePage({ stackData }: Props) {
 
   const stats = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const p of POSITIONS) counts[p] = 0;
+    for (const p of OPEN_RANGE_POSITIONS) counts[p] = 0;
     let foldCount = 0;
 
     forEachHand((hand, combos) => {
@@ -34,7 +34,7 @@ export function OpenRangePage({ stackData }: Props) {
   }, [handPosition]);
 
   const legendItems: LegendItem[] = [
-    ...POSITIONS.map(p => ({ label: p, bg: POSITION_COLORS[p], count: stats.counts[p] || 0 })),
+    ...OPEN_RANGE_POSITIONS.map(p => ({ label: p, bg: POSITION_COLORS[p], count: stats.counts[p] || 0 })),
     { label: 'Fold', bg: '#374151', count: stats.foldCount },
   ];
 

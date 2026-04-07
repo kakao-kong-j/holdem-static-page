@@ -1,8 +1,8 @@
 import { useState, useMemo, useEffect } from 'react';
 import { RangeGrid } from '../components/RangeGrid';
-import { Legend, type LegendItem } from '../components/Legend';
+import { Legend } from '../components/Legend';
 import { ACTION_COLORS } from '../constants';
-import { buildHandAction, forEachHand } from '../utils/hand';
+import { buildHandAction, buildActionStats } from '../utils/hand';
 import {
   buildScenarioMap,
   getHeroPositions,
@@ -76,23 +76,10 @@ export function FacingPage({ stackData }: Props) {
     [chartData]
   );
 
-  const actionStats = useMemo(() => {
-    const counts: Record<string, number> = {};
-    forEachHand((hand, combos) => {
-      const action = handAction[hand] ?? 'fold';
-      counts[action] = (counts[action] || 0) + combos;
-    });
-    return counts;
-  }, [handAction]);
-
-  const legendItems: LegendItem[] = Object.entries(actionStats)
-    .filter(([action]) => action !== 'fold')
-    .map(([action, count]) => {
-      const c = ACTION_COLORS[action] || ACTION_COLORS['fold'];
-      return { label: `${c.label} ${action}`, bg: c.bg, count };
-    });
-
-  const totalNonFold = legendItems.reduce((a, b) => a + b.count, 0);
+  const { actionStats, legendItems, totalNonFold } = useMemo(
+    () => buildActionStats(handAction),
+    [handAction]
+  );
 
   const selectClass =
     'bg-gray-800 text-gray-200 rounded px-3 py-2 text-sm border border-gray-600 focus:border-blue-500 focus:outline-none';

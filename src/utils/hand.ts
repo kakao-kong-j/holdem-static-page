@@ -1,5 +1,6 @@
-import { RANKS, POSITIONS } from '../constants';
+import { RANKS, OPEN_RANGE_POSITIONS, ACTION_COLORS } from '../constants';
 import type { ChartData, StackData } from '../types';
+import type { LegendItem } from '../components/Legend';
 
 export function getHandName(ri: number, ci: number): string {
   if (ri === ci) return `${RANKS[ri]}${RANKS[ri]}`;
@@ -37,10 +38,32 @@ export function forEachHand(fn: (hand: string, combos: number) => void): void {
   }
 }
 
+export function buildActionStats(handAction: Record<string, string>): {
+  actionStats: Record<string, number>;
+  legendItems: LegendItem[];
+  totalNonFold: number;
+} {
+  const actionStats: Record<string, number> = {};
+  forEachHand((hand, combos) => {
+    const action = handAction[hand] ?? 'fold';
+    actionStats[action] = (actionStats[action] || 0) + combos;
+  });
+
+  const legendItems: LegendItem[] = Object.entries(actionStats)
+    .filter(([action]) => action !== 'fold')
+    .map(([action, count]) => {
+      const c = ACTION_COLORS[action] || ACTION_COLORS['fold'];
+      return { label: `${c.label} ${action}`, bg: c.bg, count };
+    });
+
+  const totalNonFold = legendItems.reduce((a, b) => a + b.count, 0);
+  return { actionStats, legendItems, totalNonFold };
+}
+
 export function buildOpenRangeData(stackData: StackData): Record<string, string> {
   const result: Record<string, string> = {};
 
-  for (const pos of POSITIONS) {
+  for (const pos of OPEN_RANGE_POSITIONS) {
     const chartName = `${pos} RFI`;
     const chart = stackData[chartName];
     if (!chart) continue;

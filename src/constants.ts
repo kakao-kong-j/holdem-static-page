@@ -4,6 +4,8 @@ export const RANKS = ['A', 'K', 'Q', 'J', 'T', '9', '8', '7', '6', '5', '4', '3'
 
 export const POSITIONS = ['UTG', 'UTG+1', 'UTG+2', 'LJ', 'HJ', 'CO', 'BTN', 'SB'] as const;
 
+export const OPEN_RANGE_POSITIONS = POSITIONS.filter(p => p !== 'SB');
+
 export const STACK_SIZES: StackSize[] = ['15BB', '25BB', '40BB', '100BB'];
 
 export const ACTION_COLORS: Record<string, ColorDef> = {
