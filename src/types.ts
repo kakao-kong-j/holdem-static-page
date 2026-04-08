@@ -11,3 +11,20 @@ export interface ColorDef {
   text: string;
   label: string;
 }
+
+export interface QuizQuestion {
+  stackSize: StackSize;
+  chartName: string;
+  hand: string;
+  correctAction: string;
+  heroPosition: string;
+  villainPosition: string;
+  situation: string;
+}
+
+export interface QuizRecord {
+  question: QuizQuestion;
+  userAnswer: string;
+  correct: boolean;
+  timestamp: number;
+}

@@ -6,14 +6,18 @@ import { StackTabs } from './components/StackTabs';
 import { OpenRangePage } from './pages/OpenRangePage';
 import { SbOpenPage } from './pages/SbOpenPage';
 import { FacingPage } from './pages/FacingPage';
+import { QuizPage } from './pages/QuizPage';
+import { QuizStatsPage } from './pages/QuizStatsPage';
 import type { StackSize } from './types';
 
-type View = 'open-range' | 'sb-open' | 'facing';
+type View = 'open-range' | 'sb-open' | 'facing' | 'quiz' | 'quiz-stats';
 
 const VIEWS: { value: View; label: string }[] = [
   { value: 'open-range', label: 'Open Range' },
   { value: 'sb-open', label: 'SB Open' },
   { value: 'facing', label: 'Facing Charts' },
+  { value: 'quiz', label: '퀴즈' },
+  { value: 'quiz-stats', label: '통계' },
 ];
 
 function App() {
@@ -66,13 +70,17 @@ function App() {
         ))}
       </div>
 
-      <div className="flex justify-center mb-4">
-        <StackTabs selected={stack} onChange={setStack} />
-      </div>
+      {view !== 'quiz' && view !== 'quiz-stats' && (
+        <div className="flex justify-center mb-4">
+          <StackTabs selected={stack} onChange={setStack} />
+        </div>
+      )}
 
       {view === 'open-range' && <OpenRangePage stackData={stackData} />}
       {view === 'sb-open' && <SbOpenPage stackData={stackData} />}
       {view === 'facing' && <FacingPage stackData={stackData} />}
+      {view === 'quiz' && <QuizPage data={data} />}
+      {view === 'quiz-stats' && <QuizStatsPage data={data} />}
     </div>
   );
 }
