@@ -205,12 +205,12 @@ export function QuizPage({ data }: Props) {
 
 <div className="text-4xl font-bold text-white">{question.hand}</div>
 
-<div className="flex flex-col items-center gap-2">
-          {!isCorrect && (
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-gray-500">내 답:</span>
+{!isCorrect ? (
+          <div className="flex items-center gap-3">
+            <div className="flex flex-col items-center gap-1">
+              <span className="text-xs text-gray-500">내 답</span>
               <span
-                className="px-3 py-1 rounded font-medium"
+                className="px-4 py-2 rounded-lg text-lg font-bold line-through opacity-60"
                 style={{
                   backgroundColor: ACTION_COLORS[userAnswer]?.bg || '#374151',
                   color: ACTION_COLORS[userAnswer]?.text || '#d1d5db',
@@ -219,11 +219,24 @@ export function QuizPage({ data }: Props) {
                 {actionLabel(userAnswer)}
               </span>
             </div>
-          )}
-          <div className="flex items-center gap-2 text-sm">
-            <span className="text-gray-500">정답:</span>
+            <span className="text-red-400 text-2xl font-bold">→</span>
+            <div className="flex flex-col items-center gap-1">
+              <span className="text-xs text-gray-500">정답</span>
+              <span
+                className="px-4 py-2 rounded-lg text-lg font-bold ring-2 ring-green-500"
+                style={{
+                  backgroundColor: ACTION_COLORS[question.correctAction]?.bg || '#374151',
+                  color: ACTION_COLORS[question.correctAction]?.text || '#d1d5db',
+                }}
+              >
+                {actionLabel(question.correctAction)}
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-1">
             <span
-              className="px-3 py-1 rounded font-medium"
+              className="px-6 py-3 rounded-lg text-xl font-bold ring-2 ring-green-500"
               style={{
                 backgroundColor: ACTION_COLORS[question.correctAction]?.bg || '#374151',
                 color: ACTION_COLORS[question.correctAction]?.text || '#d1d5db',
@@ -232,7 +245,7 @@ export function QuizPage({ data }: Props) {
               {actionLabel(question.correctAction)}
             </span>
           </div>
-        </div>
+        )}
 
 <div className="text-sm text-gray-500">
           정답: {correct}/{total}

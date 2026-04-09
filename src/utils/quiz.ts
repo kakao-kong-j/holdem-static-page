@@ -13,7 +13,7 @@ interface ChartScenario {
 
 function parseChartScenario(chartName: string): ChartScenario | null {
   // 내 오픈 후 대응 — 제외
-  if (chartName.match(/RFI vs .+ Allin$/)) return null;
+  if (chartName.includes('Allin')) return null;
   if (chartName.match(/ vs .+ 3bet$/)) return null;
   if (chartName.match(/^SB Limp vs BB /)) return null;
   if (chartName.match(/^BB vs SB /)) return null;
