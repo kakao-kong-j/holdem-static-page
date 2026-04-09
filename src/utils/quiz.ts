@@ -12,7 +12,13 @@ interface ChartScenario {
 }
 
 function parseChartScenario(chartName: string): ChartScenario | null {
-  // RFI: "CO RFI" → hero=CO, villain=없음, situation="CO 오픈 레인지"
+  // 내 오픈 후 대응 — 제외
+  if (chartName.match(/RFI vs .+ Allin$/)) return null;
+  if (chartName.match(/ vs .+ 3bet$/)) return null;
+  if (chartName.match(/^SB Limp vs BB /)) return null;
+  if (chartName.match(/^BB vs SB /)) return null;
+
+  // RFI 오픈 레인지: "CO RFI"
   const rfiMatch = chartName.match(/^(.+) RFI$/);
   if (rfiMatch && !chartName.includes('vs') && !chartName.includes('BvB')) {
     const pos = rfiMatch[1];
@@ -24,33 +30,7 @@ function parseChartScenario(chartName: string): ChartScenario | null {
     };
   }
 
-  // RFI vs Allin: "CO RFI vs BTN Allin"
-  const allinMatch = chartName.match(/^(.+) RFI vs (.+) Allin$/);
-  if (allinMatch) {
-    const hero = allinMatch[1];
-    const villain = allinMatch[2];
-    return {
-      chartName,
-      heroPosition: hero,
-      villainPosition: villain,
-      situation: `${hero} 오픈 후 ${villain} 올인에 대응`,
-    };
-  }
-
-  // RFI vs 3bet: "UTG vs CO 3bet"
-  const vs3betMatch = chartName.match(/^(.+) vs (.+) 3bet$/);
-  if (vs3betMatch) {
-    const openerRaw = vs3betMatch[1].replace(' RFI', '');
-    const villain = vs3betMatch[2];
-    return {
-      chartName,
-      heroPosition: openerRaw,
-      villainPosition: villain,
-      situation: `${openerRaw} 오픈 후 ${villain} 3bet에 대응`,
-    };
-  }
-
-  // SB RFI BvB
+  // SB 오픈 레인지 (BvB): "SB RFI BvB"
   if (chartName === 'SB RFI BvB') {
     return {
       chartName,
@@ -60,29 +40,7 @@ function parseChartScenario(chartName: string): ChartScenario | null {
     };
   }
 
-  // SB Limp vs BB X
-  const sbLimpMatch = chartName.match(/^SB Limp vs BB (.+)$/);
-  if (sbLimpMatch) {
-    return {
-      chartName,
-      heroPosition: 'SB',
-      villainPosition: 'BB',
-      situation: `SB 림프 후 BB ${sbLimpMatch[1]}에 대응`,
-    };
-  }
-
-  // BB vs SB X
-  const bbVsSbMatch = chartName.match(/^BB vs SB (.+)$/);
-  if (bbVsSbMatch) {
-    return {
-      chartName,
-      heroPosition: 'BB',
-      villainPosition: 'SB',
-      situation: `SB ${bbVsSbMatch[1]}에 BB 대응`,
-    };
-  }
-
-  // Facing RFI: "CO vs UTG RFI" or "CO vs UTG" (100BB)
+  // Facing RFI: "CO vs UTG RFI"
   const facingRfiMatch = chartName.match(/^(.+) vs (.+) RFI$/);
   if (facingRfiMatch) {
     return {

@@ -88,19 +88,26 @@ export function FacingPage({ stackData }: Props) {
     <div className="flex flex-col items-center">
       {/* 상황 탭 */}
       <div className="flex gap-1.5 mb-4">
-        {scenarioMap.categories.map(c => (
-          <button
-            key={c}
-            onClick={() => setCategory(c)}
-            className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-              category === c
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-300'
-            }`}
-          >
-            {c}
-          </button>
-        ))}
+        {scenarioMap.categories.map(c => {
+          const disabled = c === '내 오픈 후 대응';
+          return (
+            <button
+              key={c}
+              onClick={() => !disabled && setCategory(c)}
+              disabled={disabled}
+              title={disabled ? '추후 대응' : undefined}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                disabled
+                  ? 'bg-gray-800/50 text-gray-600 cursor-not-allowed'
+                  : category === c
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-300'
+              }`}
+            >
+              {c}
+            </button>
+          );
+        })}
       </div>
 
       {/* 포지션 선택 */}
