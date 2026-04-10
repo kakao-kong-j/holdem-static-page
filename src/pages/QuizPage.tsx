@@ -1,7 +1,14 @@
 import { useState, useCallback } from 'react';
 import { ACTION_COLORS, POSITION_COLORS, STACK_SIZES } from '../constants';
 import { generateQuizQuestion, saveQuizRecord, actionLabel } from '../utils/quiz';
+import type { QuizChartFilter } from '../utils/quiz';
 import type { AllData, StackSize, QuizQuestion, QuizRecord } from '../types';
+
+const CHART_FILTER_OPTIONS: { value: QuizChartFilter; label: string }[] = [
+  { value: 'open-range', label: '오픈 레인지' },
+  { value: 'facing', label: 'Facing' },
+  { value: 'both', label: '모두' },
+];
 
 type Phase = 'settings' | 'question' | 'result';
 
@@ -12,6 +19,7 @@ interface Props {
 export function QuizPage({ data }: Props) {
   const [phase, setPhase] = useState<Phase>('settings');
   const [selectedStacks, setSelectedStacks] = useState<StackSize[]>([...STACK_SIZES]);
+  const [chartFilter, setChartFilter] = useState<QuizChartFilter>('both');
   const [question, setQuestion] = useState<QuizQuestion | null>(null);
   const [choices, setChoices] = useState<string[]>([]);
   const [userAnswer, setUserAnswer] = useState('');
@@ -25,13 +33,13 @@ export function QuizPage({ data }: Props) {
   };
 
   const nextQuestion = useCallback(() => {
-    const result = generateQuizQuestion(data, selectedStacks);
+    const result = generateQuizQuestion(data, selectedStacks, chartFilter);
     if (!result) return;
     setQuestion(result.question);
     setChoices(result.choices);
     setUserAnswer('');
     setPhase('question');
-  }, [data, selectedStacks]);
+  }, [data, selectedStacks, chartFilter]);
 
   const handleAnswer = (action: string) => {
     if (!question) return;
@@ -69,6 +77,25 @@ export function QuizPage({ data }: Props) {
                 }`}
               >
                 {s}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="text-sm text-gray-400 mb-2">차트 타입 선택</p>
+          <div className="flex gap-2">
+            {CHART_FILTER_OPTIONS.map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => setChartFilter(opt.value)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  chartFilter === opt.value
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-gray-800 text-gray-500'
+                }`}
+              >
+                {opt.label}
               </button>
             ))}
           </div>

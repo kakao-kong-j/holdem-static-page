@@ -4,11 +4,15 @@ import { buildHandAction, forEachHand } from './hand';
 
 const STORAGE_KEY = 'holdem_quiz_records';
 
+export type QuizChartType = 'open-range' | 'facing';
+export type QuizChartFilter = QuizChartType | 'both';
+
 interface ChartScenario {
   chartName: string;
   heroPosition: string;
   villainPosition: string;
   situation: string;
+  chartType: QuizChartType;
 }
 
 function parseChartScenario(chartName: string): ChartScenario | null {
@@ -27,6 +31,7 @@ function parseChartScenario(chartName: string): ChartScenario | null {
       heroPosition: pos,
       villainPosition: '',
       situation: `${pos} 오픈 레인지`,
+      chartType: 'open-range',
     };
   }
 
@@ -37,6 +42,7 @@ function parseChartScenario(chartName: string): ChartScenario | null {
       heroPosition: 'SB',
       villainPosition: 'BB',
       situation: 'SB vs BB 오픈 레인지',
+      chartType: 'open-range',
     };
   }
 
@@ -48,6 +54,7 @@ function parseChartScenario(chartName: string): ChartScenario | null {
       heroPosition: facingRfiMatch[1],
       villainPosition: facingRfiMatch[2],
       situation: `${facingRfiMatch[2]} 오픈, ${facingRfiMatch[1]}에서 대응`,
+      chartType: 'facing',
     };
   }
 
@@ -59,6 +66,7 @@ function parseChartScenario(chartName: string): ChartScenario | null {
       heroPosition: facingMatch[1],
       villainPosition: facingMatch[2],
       situation: `${facingMatch[2]} 오픈, ${facingMatch[1]}에서 대응`,
+      chartType: 'facing',
     };
   }
 
@@ -74,7 +82,11 @@ forEachHand(hand => ALL_HANDS.push(hand));
 
 const scenarioCache = new Map<string, ChartScenario[]>();
 
-function getScenariosForStack(stackData: Record<string, Record<string, string[]>>, stack: string): ChartScenario[] {
+function getScenariosForStack(
+  stackData: Record<string, Record<string, string[]>>,
+  stack: string,
+  filter: QuizChartFilter,
+): ChartScenario[] {
   let cached = scenarioCache.get(stack);
   if (!cached) {
     cached = [];
@@ -86,7 +98,8 @@ function getScenariosForStack(stackData: Record<string, Record<string, string[]>
     }
     scenarioCache.set(stack, cached);
   }
-  return cached;
+  if (filter === 'both') return cached;
+  return cached.filter(s => s.chartType === filter);
 }
 
 export interface QuizResult {
@@ -97,12 +110,13 @@ export interface QuizResult {
 export function generateQuizQuestion(
   data: AllData,
   selectedStacks: StackSize[],
+  chartFilter: QuizChartFilter,
 ): QuizResult | null {
   const stack = pickRandom(selectedStacks);
   const stackData = data[stack];
   if (!stackData) return null;
 
-  const scenarios = getScenariosForStack(stackData, stack);
+  const scenarios = getScenariosForStack(stackData, stack, chartFilter);
   if (scenarios.length === 0) return null;
 
   const scenario = pickRandom(scenarios);
