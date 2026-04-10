@@ -78,7 +78,9 @@ function getScenariosForStack(stackData: Record<string, Record<string, string[]>
   let cached = scenarioCache.get(stack);
   if (!cached) {
     cached = [];
+    const excludeSbOpen = stack === '25BB' || stack === '40BB';
     for (const name of Object.keys(stackData)) {
+      if (excludeSbOpen && (name === 'SB RFI' || name === 'SB RFI BvB')) continue;
       const s = parseChartScenario(name);
       if (s) cached.push(s);
     }
