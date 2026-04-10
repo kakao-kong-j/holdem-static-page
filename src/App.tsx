@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from './hooks/useAuth';
 import { useChartData } from './hooks/useChartData';
 import { PasswordGate } from './components/PasswordGate';
@@ -20,11 +20,19 @@ const VIEWS: { value: View; label: string }[] = [
   { value: 'quiz-stats', label: '통계' },
 ];
 
+const SB_OPEN_DISABLED_STACKS: StackSize[] = ['25BB', '40BB'];
+
 function App() {
   const { isAuthenticated, login } = useAuth();
   const { data, loading, error } = useChartData(isAuthenticated);
   const [stack, setStack] = useState<StackSize>('100BB');
   const [view, setView] = useState<View>('open-range');
+
+  useEffect(() => {
+    if (view === 'sb-open' && SB_OPEN_DISABLED_STACKS.includes(stack)) {
+      setStack('100BB');
+    }
+  }, [view, stack]);
 
   if (!isAuthenticated) {
     return <PasswordGate onLogin={login} />;
@@ -72,7 +80,11 @@ function App() {
 
       {view !== 'quiz' && view !== 'quiz-stats' && (
         <div className="flex justify-center mb-4">
-          <StackTabs selected={stack} onChange={setStack} />
+          <StackTabs
+            selected={stack}
+            onChange={setStack}
+            disabledStacks={view === 'sb-open' ? SB_OPEN_DISABLED_STACKS : undefined}
+          />
         </div>
       )}
 
