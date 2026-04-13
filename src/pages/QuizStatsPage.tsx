@@ -12,7 +12,15 @@ import {
 } from '../utils/quiz';
 import { computeDeviationStats } from '../utils/stats';
 import { HexagonRadar, type HexagonAxis } from '../components/HexagonRadar';
+import { ErrorDonut } from '../components/ErrorDonut';
+import {
+  analyzeQuizResults,
+  type PlayerProfile,
+  type Priority,
+  type ProfileLabel,
+} from '../utils/analyzeQuizResults';
 import type { AllData, QuizRecord } from '../types';
+import type { NavigateIntent } from '../App';
 
 type Filter = { type: 'stack'; value: string } | { type: 'position'; value: string } | null;
 
@@ -210,6 +218,186 @@ function PlayStyleSection({ d }: { d: ReturnType<typeof computeDeviationStats> }
   );
 }
 
+const PROFILE_COLORS: Record<ProfileLabel, string> = {
+  'TAG-Linear': 'bg-indigo-600',
+  Nit: 'bg-sky-600',
+  LAG: 'bg-orange-600',
+  Passive: 'bg-yellow-600',
+  Balanced: 'bg-emerald-600',
+};
+
+const PROFILE_DESC: Record<ProfileLabel, string> = {
+  'TAG-Linear': '타이트하고 공격적 — 3벳을 공격적으로 씀',
+  Nit: '지나치게 타이트 — 마진 핸드를 폴드함',
+  LAG: '루즈하고 공격적 — 과플레이 경향',
+  Passive: '수동적 — 블러프/리레이즈 부족',
+  Balanced: 'GTO에 가까운 균형 잡힌 플레이',
+};
+
+function HeaderCard({ profile }: { profile: PlayerProfile }) {
+  const accPct = Math.round(profile.accuracy * 100);
+  const badgeClass = PROFILE_COLORS[profile.profileLabel];
+  return (
+    <div className="w-full bg-gray-800/50 rounded-lg p-4 flex items-center justify-between gap-4">
+      <div>
+        <div className="text-3xl font-bold text-white">{accPct}%</div>
+        <div className="text-xs text-gray-400 mt-0.5">
+          정답률 ({profile.totalQuestions}문항)
+        </div>
+      </div>
+      <div className="flex flex-col items-end gap-1">
+        <span className={`px-3 py-1 rounded-full text-white text-xs font-bold ${badgeClass}`}>
+          {profile.profileLabel}
+        </span>
+        <span className="text-[10px] text-gray-500 text-right max-w-[180px]">
+          {PROFILE_DESC[profile.profileLabel]}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+interface MetricBar {
+  label: string;
+  value: number; // 0..1
+  caption: string;
+}
+
+function MetricsDetail({ profile }: { profile: PlayerProfile }) {
+  const m = profile.metrics;
+  const bars: MetricBar[] = [
+    { label: 'VPIP Compliance',  value: m.vpip.compliance,    caption: `GTO가 플레이하는 스팟에서 ${Math.round(m.vpip.compliance*100)}% 참여 (${m.vpip.deviation})` },
+    { label: 'PFR Compliance',   value: m.pfr.compliance,     caption: `RFI 레이즈 스팟에서 ${Math.round(m.pfr.compliance*100)}% 일치 (${m.pfr.deviation})` },
+    { label: 'Cold Call',        value: m.coldCall.compliance,caption: `GTO 콜 스팟에서 ${Math.round(m.coldCall.compliance*100)}% 일치 — ${m.coldCall.verdict}` },
+    { label: 'Steal',            value: m.steal.compliance,   caption: `CO/BTN/SB 오픈 스팟에서 ${Math.round(m.steal.compliance*100)}% 일치 — ${m.steal.verdict}` },
+    { label: '3Bet',             value: 1 - m.threebet.over3betRate, caption: `3벳 균형 (과공격 ${Math.round(m.threebet.over3betRate*100)}% / 블러프 놓침 ${Math.round(m.threebet.missedBluffRate*100)}%) — ${m.threebet.verdict}` },
+    { label: 'Position Sense',   value: m.positionSense.score,caption: `포지션별 정답률 균일도 ${Math.round(m.positionSense.score*100)}%${m.positionSense.weakPositions.length ? ` — 약점: ${m.positionSense.weakPositions.join(', ')}` : ''}` },
+  ];
+  return (
+    <div className="w-full">
+      <h3 className="text-sm font-medium text-gray-400 mb-2">지표 상세</h3>
+      <div className="space-y-2">
+        {bars.map(b => {
+          const pct = Math.round(Math.max(0, Math.min(1, b.value)) * 100);
+          const color =
+            pct >= 80 ? 'bg-emerald-500' :
+            pct >= 60 ? 'bg-indigo-500' :
+            pct >= 40 ? 'bg-yellow-500' : 'bg-orange-500';
+          return (
+            <div key={b.label} className="bg-gray-800/50 rounded px-3 py-2">
+              <div className="flex items-baseline justify-between mb-1">
+                <span className="text-gray-300 text-sm font-medium">{b.label}</span>
+                <span className="text-white text-sm font-bold">{pct}%</span>
+              </div>
+              <div className="w-full bg-gray-900/60 rounded-full h-1.5 overflow-hidden">
+                <div className={`h-full ${color} transition-all`} style={{ width: `${pct}%` }} />
+              </div>
+              <div className="text-[11px] text-gray-500 mt-1">{b.caption}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function PrioritiesSection({
+  priorities,
+  onNavigate,
+}: {
+  priorities: Priority[];
+  onNavigate: (i: NavigateIntent) => void;
+}) {
+  return (
+    <div className="w-full">
+      <h3 className="text-sm font-medium text-gray-400 mb-2">약점 TOP {priorities.length}</h3>
+      <div className="space-y-2">
+        {priorities.map(p => (
+          <div key={p.bucket} className="bg-gray-800/60 rounded-lg p-3 border border-gray-700">
+            <div className="flex items-start gap-2">
+              <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-red-900/60 text-red-300 text-xs font-bold">
+                {p.rank}
+              </span>
+              <div className="flex-1 min-w-0">
+                <div className="text-white font-semibold text-sm">{p.title}</div>
+                <div className="text-gray-400 text-xs mt-0.5">{p.description}</div>
+                <div className="text-gray-600 text-[10px] mt-1">
+                  추천 차트: {p.chartLink.stack} · {p.chartLink.chartName}
+                </div>
+              </div>
+              <button
+                onClick={() => onNavigate({
+                  kind: 'chart',
+                  stack: p.chartLink.stack,
+                  chartName: p.chartLink.chartName,
+                  type: p.chartLink.type,
+                })}
+                className="shrink-0 px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-medium"
+              >
+                차트 보기
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ErrorTable({
+  records,
+  onReview,
+}: {
+  records: QuizRecord[];
+  onReview: (r: QuizRecord) => void;
+}) {
+  if (records.length === 0) return null;
+  return (
+    <div className="w-full">
+      <h3 className="text-sm font-medium text-gray-400 mb-2">오답 목록 ({records.length}건)</h3>
+      <div className="space-y-1">
+        {records.slice(0, 50).map((r, i) => (
+          <div key={i} className="bg-gray-800/50 rounded px-2 py-1.5 flex items-center gap-2 text-xs">
+            <span className="text-gray-500 font-mono w-12 shrink-0">{r.question.stackSize}</span>
+            <span className="text-white font-bold w-10 shrink-0">{r.question.hand}</span>
+            <span className="text-gray-400 flex-1 truncate">{r.question.situation || r.question.chartName}</span>
+            <span
+              className="px-1.5 py-0.5 rounded text-[10px] font-medium line-through opacity-60 shrink-0"
+              style={{
+                backgroundColor: ACTION_COLORS[r.userAnswer]?.bg || '#374151',
+                color: ACTION_COLORS[r.userAnswer]?.text || '#d1d5db',
+              }}
+            >
+              {actionLabel(r.userAnswer)}
+            </span>
+            <span className="text-gray-600 shrink-0">→</span>
+            <span
+              className="px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0"
+              style={{
+                backgroundColor: ACTION_COLORS[r.question.correctAction]?.bg || '#374151',
+                color: ACTION_COLORS[r.question.correctAction]?.text || '#d1d5db',
+              }}
+            >
+              {actionLabel(r.question.correctAction)}
+            </span>
+            <button
+              onClick={() => onReview(r)}
+              className="shrink-0 px-2 py-0.5 bg-gray-700 hover:bg-indigo-600 text-gray-200 hover:text-white rounded text-[10px] font-medium transition-colors"
+            >
+              복습
+            </button>
+          </div>
+        ))}
+        {records.length > 50 && (
+          <div className="text-center text-xs text-gray-500 mt-2">
+            최신 50건만 표시 (총 {records.length}건)
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ChartPreview({ chartData, chartName }: { chartData: Record<string, string[]>; chartName: string }) {
   const handAction = useMemo(() => buildHandAction(chartData), [chartData]);
   const { legendItems, totalNonFold } = useMemo(() => buildActionStats(handAction), [handAction]);
@@ -223,12 +411,18 @@ function ChartPreview({ chartData, chartName }: { chartData: Record<string, stri
   );
 }
 
-export function QuizStatsPage({ data }: { data: AllData }) {
+interface QuizStatsPageProps {
+  data: AllData;
+  onNavigate: (intent: NavigateIntent) => void;
+}
+
+export function QuizStatsPage({ data, onNavigate }: QuizStatsPageProps) {
   const [records, setRecords] = useState<QuizRecord[]>(() => loadQuizRecords());
   const [filter, setFilter] = useState<Filter>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const deviation = useMemo(() => computeDeviationStats(records), [records]);
+  const profile = useMemo(() => analyzeQuizResults(records), [records]);
 
   const stats = useMemo(() => {
     if (records.length === 0) return null;
@@ -322,8 +516,14 @@ export function QuizStatsPage({ data }: { data: AllData }) {
     return (
       <div className="flex flex-col items-center gap-4">
         <h2 className="text-lg font-bold text-white">퀴즈 통계</h2>
-        <p className="text-gray-500">아직 퀴즈 기록이 없습니다.</p>
+        <p className="text-gray-500">아직 푼 퀴즈가 없습니다. 먼저 퀴즈를 풀어보세요!</p>
         <div className="flex gap-2">
+          <button
+            onClick={() => onNavigate({ kind: 'quiz' })}
+            className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-500"
+          >
+            퀴즈 시작
+          </button>
           <label className="px-4 py-2 bg-gray-800 text-gray-300 rounded-lg text-sm cursor-pointer hover:bg-gray-700">
             기록 가져오기
             <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={handleImport} />
@@ -335,18 +535,24 @@ export function QuizStatsPage({ data }: { data: AllData }) {
 
   return (
     <div className="flex flex-col items-center gap-6 max-w-lg mx-auto">
-      <h2 className="text-lg font-bold text-white">퀴즈 통계</h2>
+      <h2 className="text-lg font-bold text-white">플레이어 프로파일</h2>
 
-<div className="w-full bg-gray-800/50 rounded-lg p-4 text-center">
-        <div className="text-3xl font-bold text-white">
-          {pct(stats.totalCorrect, records.length)}
-        </div>
-        <div className="text-sm text-gray-400 mt-1">
-          전체 정답률 ({stats.totalCorrect}/{records.length})
+      <HeaderCard profile={profile} />
+
+      <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-4">
+        <PlayStyleSection d={deviation} />
+        <div className="bg-gray-800/30 rounded-lg p-3 flex flex-col items-center">
+          <h3 className="text-sm font-medium text-gray-400 mb-2 self-start">에러 분포</h3>
+          <ErrorDonut buckets={profile.errorBuckets} />
         </div>
       </div>
 
-      <PlayStyleSection d={deviation} />
+      <MetricsDetail profile={profile} />
+
+      {profile.priorities.length > 0 && (
+        <PrioritiesSection priorities={profile.priorities} onNavigate={onNavigate} />
+      )}
+
 
 <div className="w-full">
         <h3 className="text-sm font-medium text-gray-400 mb-2">스택별 정답률</h3>
@@ -454,6 +660,11 @@ export function QuizStatsPage({ data }: { data: AllData }) {
           </div>
         </div>
       )}
+
+<ErrorTable
+        records={records.filter(r => !r.correct)}
+        onReview={r => onNavigate({ kind: 'review', question: r.question })}
+      />
 
 <div className="flex gap-2 flex-wrap justify-center pt-2">
         <button

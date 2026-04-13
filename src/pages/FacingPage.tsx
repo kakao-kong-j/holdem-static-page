@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { RangeGrid } from '../components/RangeGrid';
 import { Legend } from '../components/Legend';
 import { ACTION_COLORS } from '../constants';
@@ -24,6 +24,37 @@ export function FacingPage({ stackData }: Props) {
   const [hero, setHero] = useState('');
   const [villain, setVillain] = useState('');
   const [selectedChart, setSelectedChart] = useState('');
+  const skipHeroReset = useRef(false);
+
+  // pendingChart: 통계 페이지 약점 카드에서 넘어왔을 때 지정 차트 자동 선택
+  useEffect(() => {
+    const pending = sessionStorage.getItem('pendingChart');
+    if (!pending) return;
+    try {
+      const { chartName } = JSON.parse(pending) as { chartName: string };
+      if (!chartName) return;
+      // 모든 (category, hero, villain) 조합을 돌며 매칭 시도
+      for (const cat of scenarioMap.categories) {
+        for (const h of getHeroPositions(scenarioMap, cat)) {
+          for (const v of getVillainOptions(scenarioMap, h, cat)) {
+            const sList = getScenarios(scenarioMap, h, v, cat);
+            if (sList.some(s => s.chartName === chartName)) {
+              skipHeroReset.current = true;
+              setCategory(cat);
+              setHero(h);
+              setVillain(v);
+              setSelectedChart(chartName);
+              sessionStorage.removeItem('pendingChart');
+              return;
+            }
+          }
+        }
+      }
+      sessionStorage.removeItem('pendingChart');
+    } catch {
+      sessionStorage.removeItem('pendingChart');
+    }
+  }, [scenarioMap]);
 
   // 카테고리 유효성
   useEffect(() => {
@@ -53,6 +84,10 @@ export function FacingPage({ stackData }: Props) {
 
   // 히어로 변경 → 빌런 + 차트 리셋
   useEffect(() => {
+    if (skipHeroReset.current) {
+      skipHeroReset.current = false;
+      return;
+    }
     const newVillain = villainOptions[0] ?? '';
     setVillain(newVillain);
     const s = newVillain ? getScenarios(scenarioMap, hero, newVillain, category) : [];
