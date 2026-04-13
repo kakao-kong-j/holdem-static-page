@@ -30,13 +30,23 @@ function formatDelta(v: number | null): string {
   return `${sign}${v.toFixed(1)}%p`;
 }
 
+function anchorForAngle(angle: number): 'start' | 'middle' | 'end' {
+  const cx = Math.cos(angle);
+  if (cx > 0.2) return 'start';
+  if (cx < -0.2) return 'end';
+  return 'middle';
+}
+
 export function HexagonRadar({ axes, cap = 20, size = 280 }: Props) {
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
 
   const center = size / 2;
-  const outerR = size * 0.38;
+  const outerR = size * 0.34;
   const midR = outerR / 2;
-  const labelR = outerR + size * 0.08;
+  const labelR = outerR + size * 0.06;
+  // extra horizontal padding so long labels like "Fold to Steal" fit
+  const padX = size * 0.18;
+  const padY = size * 0.06;
 
   const angles = axes.map((_, i) => -Math.PI / 2 + (i * Math.PI) / 3);
 
@@ -62,7 +72,10 @@ export function HexagonRadar({ axes, cap = 20, size = 280 }: Props) {
 
   return (
     <div className="relative w-full max-w-sm">
-      <svg viewBox={`0 0 ${size} ${size}`} className="w-full">
+      <svg
+        viewBox={`${-padX} ${-padY} ${size + 2 * padX} ${size + 2 * padY}`}
+        className="w-full"
+      >
         <polygon points={ptStr(outerPoints)} fill="none" stroke="#374151" strokeWidth="1" />
         <polygon
           points={ptStr(angles.map(a => toPoint(a, outerR * 0.25)))}
@@ -104,6 +117,7 @@ export function HexagonRadar({ axes, cap = 20, size = 280 }: Props) {
           const v = axes[i].value;
           const sign = v === null ? '' : v > 0 ? '+' : '';
           const valStr = v === null ? '—' : `${sign}${v.toFixed(1)}%`;
+          const anchor = anchorForAngle(a);
           return (
             <g
               key={i}
@@ -112,11 +126,10 @@ export function HexagonRadar({ axes, cap = 20, size = 280 }: Props) {
               onTouchStart={() => setHoveredIdx(prev => (prev === i ? null : i))}
               className="cursor-pointer"
             >
-              {/* larger invisible hit target */}
               <circle cx={p.x} cy={p.y} r="22" fill="transparent" />
               <text
                 x={p.x} y={p.y - 4}
-                textAnchor="middle" fontSize="11"
+                textAnchor={anchor} fontSize="11"
                 fill={hoveredIdx === i ? '#e5e7eb' : '#9ca3af'}
                 fontWeight={hoveredIdx === i ? '600' : '500'}
               >
@@ -124,7 +137,7 @@ export function HexagonRadar({ axes, cap = 20, size = 280 }: Props) {
               </text>
               <text
                 x={p.x} y={p.y + 10}
-                textAnchor="middle" fontSize="10"
+                textAnchor={anchor} fontSize="10"
                 fill={v === null ? '#6b7280' : v > 2 ? '#fb923c' : v < -2 ? '#38bdf8' : '#d1d5db'}
               >
                 {valStr}
