@@ -257,50 +257,6 @@ function HeaderCard({ profile }: { profile: PlayerProfile }) {
   );
 }
 
-interface MetricBar {
-  label: string;
-  value: number; // 0..1
-  caption: string;
-}
-
-function MetricsDetail({ profile }: { profile: PlayerProfile }) {
-  const m = profile.metrics;
-  const bars: MetricBar[] = [
-    { label: 'VPIP Compliance',  value: m.vpip.compliance,    caption: `GTO가 플레이하는 스팟에서 ${Math.round(m.vpip.compliance*100)}% 참여 (${m.vpip.deviation})` },
-    { label: 'PFR Compliance',   value: m.pfr.compliance,     caption: `RFI 레이즈 스팟에서 ${Math.round(m.pfr.compliance*100)}% 일치 (${m.pfr.deviation})` },
-    { label: 'Cold Call',        value: m.coldCall.compliance,caption: `GTO 콜 스팟에서 ${Math.round(m.coldCall.compliance*100)}% 일치 — ${m.coldCall.verdict}` },
-    { label: 'Steal',            value: m.steal.compliance,   caption: `CO/BTN/SB 오픈 스팟에서 ${Math.round(m.steal.compliance*100)}% 일치 — ${m.steal.verdict}` },
-    { label: '3Bet',             value: 1 - m.threebet.over3betRate, caption: `3벳 균형 (과공격 ${Math.round(m.threebet.over3betRate*100)}% / 블러프 놓침 ${Math.round(m.threebet.missedBluffRate*100)}%) — ${m.threebet.verdict}` },
-    { label: 'Position Sense',   value: m.positionSense.score,caption: `포지션별 정답률 균일도 ${Math.round(m.positionSense.score*100)}%${m.positionSense.weakPositions.length ? ` — 약점: ${m.positionSense.weakPositions.join(', ')}` : ''}` },
-  ];
-  return (
-    <div className="w-full">
-      <h3 className="text-sm font-medium text-gray-400 mb-2">지표 상세</h3>
-      <div className="space-y-2">
-        {bars.map(b => {
-          const pct = Math.round(Math.max(0, Math.min(1, b.value)) * 100);
-          const color =
-            pct >= 80 ? 'bg-emerald-500' :
-            pct >= 60 ? 'bg-indigo-500' :
-            pct >= 40 ? 'bg-yellow-500' : 'bg-orange-500';
-          return (
-            <div key={b.label} className="bg-gray-800/50 rounded px-3 py-2">
-              <div className="flex items-baseline justify-between mb-1">
-                <span className="text-gray-300 text-sm font-medium">{b.label}</span>
-                <span className="text-white text-sm font-bold">{pct}%</span>
-              </div>
-              <div className="w-full bg-gray-900/60 rounded-full h-1.5 overflow-hidden">
-                <div className={`h-full ${color} transition-all`} style={{ width: `${pct}%` }} />
-              </div>
-              <div className="text-[11px] text-gray-500 mt-1">{b.caption}</div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 function PrioritiesSection({
   priorities,
   onNavigate,
@@ -546,8 +502,6 @@ export function QuizStatsPage({ data, onNavigate }: QuizStatsPageProps) {
           <ErrorDonut buckets={profile.errorBuckets} />
         </div>
       </div>
-
-      <MetricsDetail profile={profile} />
 
       {profile.priorities.length > 0 && (
         <PrioritiesSection priorities={profile.priorities} onNavigate={onNavigate} />
