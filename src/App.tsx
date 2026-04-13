@@ -8,9 +8,14 @@ import { SbOpenPage } from './pages/SbOpenPage';
 import { FacingPage } from './pages/FacingPage';
 import { QuizPage } from './pages/QuizPage';
 import { QuizStatsPage } from './pages/QuizStatsPage';
-import type { StackSize } from './types';
+import type { StackSize, QuizQuestion } from './types';
 
 type View = 'open-range' | 'sb-open' | 'facing' | 'quiz' | 'quiz-stats';
+
+export type NavigateIntent =
+  | { kind: 'chart'; stack: StackSize; chartName: string; viewType: 'open-range' | 'sb-open' | 'facing' }
+  | { kind: 'review'; question: QuizQuestion }
+  | { kind: 'quiz' };
 
 const VIEWS: { value: View; label: string }[] = [
   { value: 'open-range', label: 'Open Range' },
@@ -33,6 +38,27 @@ function App() {
       setStack('100BB');
     }
   }, [view, stack]);
+
+  const navigate = (intent: NavigateIntent) => {
+    if (intent.kind === 'chart') {
+      sessionStorage.setItem('pendingChart', JSON.stringify({
+        stack: intent.stack,
+        chartName: intent.chartName,
+        viewType: intent.viewType,
+      }));
+      const targetView: View =
+        intent.viewType === 'sb-open' && SB_OPEN_DISABLED_STACKS.includes(intent.stack)
+          ? 'open-range'
+          : intent.viewType;
+      setStack(intent.stack);
+      setView(targetView);
+    } else if (intent.kind === 'review') {
+      sessionStorage.setItem('pendingReview', JSON.stringify(intent.question));
+      setView('quiz');
+    } else if (intent.kind === 'quiz') {
+      setView('quiz');
+    }
+  };
 
   if (!isAuthenticated) {
     return <PasswordGate onLogin={login} />;
@@ -92,7 +118,7 @@ function App() {
       {view === 'sb-open' && <SbOpenPage stackData={stackData} />}
       {view === 'facing' && <FacingPage stackData={stackData} />}
       {view === 'quiz' && <QuizPage data={data} />}
-      {view === 'quiz-stats' && <QuizStatsPage data={data} />}
+      {view === 'quiz-stats' && <QuizStatsPage data={data} onNavigate={navigate} />}
     </div>
   );
 }

@@ -20,10 +20,36 @@ interface Props {
 export function FacingPage({ stackData }: Props) {
   const scenarioMap = useMemo(() => buildScenarioMap(stackData), [stackData]);
 
-  const [category, setCategory] = useState<ScenarioCategory>('상대 오픈 대응');
-  const [hero, setHero] = useState('');
-  const [villain, setVillain] = useState('');
-  const [selectedChart, setSelectedChart] = useState('');
+  // 통계 페이지에서 넘어온 pendingChart를 마운트 시점에 초기 상태로 적용
+  // (effect 캐스케이드가 덮어쓰지 못하도록 useState 초기값으로 직접 주입)
+  const [initialFromPending] = useState<{
+    cat: ScenarioCategory; h: string; v: string; chartName: string;
+  } | null>(() => {
+    const pending = sessionStorage.getItem('pendingChart');
+    if (!pending) return null;
+    sessionStorage.removeItem('pendingChart');
+    try {
+      const { chartName } = JSON.parse(pending) as { chartName: string };
+      if (!chartName) return null;
+      for (const cat of scenarioMap.categories) {
+        for (const h of getHeroPositions(scenarioMap, cat)) {
+          for (const v of getVillainOptions(scenarioMap, h, cat)) {
+            if (getScenarios(scenarioMap, h, v, cat).some(s => s.chartName === chartName)) {
+              return { cat, h, v, chartName };
+            }
+          }
+        }
+      }
+    } catch { /* ignore */ }
+    return null;
+  });
+
+  const [category, setCategory] = useState<ScenarioCategory>(
+    initialFromPending?.cat ?? '상대 오픈 대응'
+  );
+  const [hero, setHero] = useState(initialFromPending?.h ?? '');
+  const [villain, setVillain] = useState(initialFromPending?.v ?? '');
+  const [selectedChart, setSelectedChart] = useState(initialFromPending?.chartName ?? '');
 
   // 카테고리 유효성
   useEffect(() => {
@@ -38,7 +64,7 @@ export function FacingPage({ stackData }: Props) {
     [scenarioMap, category]
   );
 
-  // 카테고리 변경 → 히어로 리셋
+  // 히어로 유효성: 현재 hero가 새 목록에 없으면만 첫 항목으로
   useEffect(() => {
     if (!heroPositions.includes(hero)) {
       setHero(heroPositions[0] ?? '');
@@ -51,13 +77,21 @@ export function FacingPage({ stackData }: Props) {
     [scenarioMap, hero, category]
   );
 
-  // 히어로 변경 → 빌런 + 차트 리셋
+  // 빌런 유효성: 현재 villain이 새 목록에 없으면만 첫 항목으로
   useEffect(() => {
-    const newVillain = villainOptions[0] ?? '';
-    setVillain(newVillain);
-    const s = newVillain ? getScenarios(scenarioMap, hero, newVillain, category) : [];
-    setSelectedChart(s[0]?.chartName ?? '');
-  }, [hero, villainOptions, scenarioMap, category]);
+    if (!villainOptions.includes(villain)) {
+      setVillain(villainOptions[0] ?? '');
+    }
+  }, [villainOptions, villain]);
+
+  // 차트 유효성: 현재 selectedChart가 (hero, villain, category) 시나리오 안에 없으면만 첫 항목으로
+  useEffect(() => {
+    if (!hero || !villain) return;
+    const s = getScenarios(scenarioMap, hero, villain, category);
+    if (!s.some(x => x.chartName === selectedChart)) {
+      setSelectedChart(s[0]?.chartName ?? '');
+    }
+  }, [scenarioMap, hero, villain, category, selectedChart]);
 
   const scenarios: Scenario[] = useMemo(() => {
     if (!hero || !villain) return [];

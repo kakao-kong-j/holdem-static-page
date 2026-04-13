@@ -12,7 +12,17 @@ import {
 } from '../utils/quiz';
 import { computeDeviationStats } from '../utils/stats';
 import { HexagonRadar, type HexagonAxis } from '../components/HexagonRadar';
+import { ErrorDonut } from '../components/ErrorDonut';
+import {
+  analyzeQuizResults,
+  type PlayerProfile,
+  type ProfileLabel,
+  type WeaknessSummary,
+  type WeaknessAnalysis,
+} from '../utils/analyzeQuizResults';
+import { WEAKNESS_MAP, ALL_TAGS, type WeaknessId } from '../utils/weaknessMap';
 import type { AllData, QuizRecord } from '../types';
+import type { NavigateIntent } from '../App';
 
 type Filter = { type: 'stack'; value: string } | { type: 'position'; value: string } | null;
 
@@ -210,6 +220,281 @@ function PlayStyleSection({ d }: { d: ReturnType<typeof computeDeviationStats> }
   );
 }
 
+const PROFILE_COLORS: Record<ProfileLabel, string> = {
+  'TAG-Linear': 'bg-indigo-600',
+  Nit: 'bg-sky-600',
+  LAG: 'bg-orange-600',
+  Passive: 'bg-yellow-600',
+  Balanced: 'bg-emerald-600',
+};
+
+const PROFILE_DESC: Record<ProfileLabel, string> = {
+  'TAG-Linear': '타이트하고 공격적 — 3벳을 공격적으로 씀',
+  Nit: '지나치게 타이트 — 마진 핸드를 폴드함',
+  LAG: '루즈하고 공격적 — 과플레이 경향',
+  Passive: '수동적 — 블러프/리레이즈 부족',
+  Balanced: 'GTO에 가까운 균형 잡힌 플레이',
+};
+
+function HeaderCard({ profile }: { profile: PlayerProfile }) {
+  const accPct = Math.round(profile.accuracy * 100);
+  const badgeClass = PROFILE_COLORS[profile.profileLabel];
+  return (
+    <div className="w-full bg-gray-800/50 rounded-lg p-4 flex items-center justify-between gap-4">
+      <div>
+        <div className="text-3xl font-bold text-white">{accPct}%</div>
+        <div className="text-xs text-gray-400 mt-0.5">
+          정답률 ({profile.totalQuestions}문항)
+        </div>
+      </div>
+      <div className="flex flex-col items-end gap-1">
+        <span className={`px-3 py-1 rounded-full text-white text-xs font-bold ${badgeClass}`}>
+          {profile.profileLabel}
+        </span>
+        <span className="text-[10px] text-gray-500 text-right max-w-[180px]">
+          {PROFILE_DESC[profile.profileLabel]}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function severityBadge(severity: number): { label: string; cls: string } {
+  if (severity >= 0.66) return { label: '상', cls: 'bg-red-900/60 text-red-300' };
+  if (severity >= 0.33) return { label: '중', cls: 'bg-yellow-900/60 text-yellow-300' };
+  return { label: '하', cls: 'bg-gray-800/60 text-gray-400' };
+}
+
+function ChartLinkButton({
+  chartLink, onNavigate, label = '차트 보기', variant = 'primary',
+}: {
+  chartLink: { stack: import('../types').StackSize; chartName: string; viewType: 'open-range' | 'sb-open' | 'facing' };
+  onNavigate: (i: NavigateIntent) => void;
+  label?: string;
+  variant?: 'primary' | 'subtle';
+}) {
+  const cls = variant === 'subtle'
+    ? 'px-2 py-0.5 text-[10px] bg-gray-700 hover:bg-indigo-600 text-gray-200'
+    : 'px-2.5 py-1 text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-medium';
+  return (
+    <button
+      onClick={() => onNavigate({
+        kind: 'chart',
+        stack: chartLink.stack,
+        chartName: chartLink.chartName,
+        viewType: chartLink.viewType,
+      })}
+      className={`shrink-0 rounded ${cls}`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function WeaknessCard({
+  s, onNavigate,
+}: {
+  s: WeaknessSummary;
+  onNavigate: (i: NavigateIntent) => void;
+}) {
+  const sev = severityBadge(s.severity);
+  return (
+    <div className="bg-gray-800/60 rounded-lg p-3 border border-gray-700">
+      <div className="flex items-start gap-2">
+        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-red-900/60 text-red-300 text-xs font-bold shrink-0">
+          {s.rank}
+        </span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-white font-semibold text-sm">{s.meta.title}</span>
+            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${sev.cls}`}>{sev.label}</span>
+            <span className="text-gray-500 text-[10px]">{s.errorCount}/{s.spotCount}회</span>
+          </div>
+          <div className="text-gray-400 text-xs mt-0.5">{s.meta.description}</div>
+          <div className="flex flex-wrap gap-1 mt-1">
+            {s.meta.tag.map(t => (
+              <span key={t} className="text-[10px] text-gray-500">{t}</span>
+            ))}
+          </div>
+        </div>
+        <ChartLinkButton chartLink={s.meta.chartLink} onNavigate={onNavigate} />
+      </div>
+    </div>
+  );
+}
+
+function WeaknessAllTable({
+  analysis, onNavigate, tagFilter,
+}: {
+  analysis: WeaknessAnalysis;
+  onNavigate: (i: NavigateIntent) => void;
+  tagFilter: string | null;
+}) {
+  const rows = useMemo(() => {
+    const ids = Object.keys(WEAKNESS_MAP) as Exclude<WeaknessId, 'other'>[];
+    return ids
+      .filter(id => !tagFilter || WEAKNESS_MAP[id].tag.includes(tagFilter))
+      .map(id => {
+        const b = analysis.byWeakness[id];
+        return {
+          id,
+          meta: WEAKNESS_MAP[id],
+          errorCount: b?.errorCount ?? 0,
+          spotCount: b?.spotCount ?? 0,
+          severity: b?.severity ?? 0,
+        };
+      })
+      .sort((a, b) => {
+        if (b.errorCount !== a.errorCount) return b.errorCount - a.errorCount;
+        return a.id.localeCompare(b.id);
+      });
+  }, [analysis, tagFilter]);
+
+  return (
+    <div className="w-full text-xs">
+      <div className="grid grid-cols-[24px_1fr_auto_auto_auto] gap-2 px-2 py-1 text-gray-500 font-medium border-b border-gray-800">
+        <span>군</span><span>약점</span><span>오답</span><span>심각도</span><span></span>
+      </div>
+      {rows.map(r => {
+        const sev = severityBadge(r.severity);
+        return (
+          <div key={r.id} className="grid grid-cols-[24px_1fr_auto_auto_auto] gap-2 px-2 py-1.5 items-center border-b border-gray-800/50 hover:bg-gray-800/30">
+            <span className="text-gray-500">{r.meta.category}</span>
+            <span className="text-gray-300 truncate" title={r.meta.description}>{r.meta.title}</span>
+            <span className={r.errorCount > 0 ? 'text-red-400 font-medium' : 'text-gray-600'}>
+              {r.errorCount}/{r.spotCount}
+            </span>
+            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${sev.cls}`}>{sev.label}</span>
+            <ChartLinkButton chartLink={r.meta.chartLink} onNavigate={onNavigate} label="차트" variant="subtle" />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function WeaknessSection({
+  analysis, onNavigate,
+}: {
+  analysis: WeaknessAnalysis;
+  onNavigate: (i: NavigateIntent) => void;
+}) {
+  const [showAll, setShowAll] = useState(false);
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
+
+  return (
+    <div className="w-full">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-sm font-medium text-gray-400">
+          약점 TOP {analysis.top3.length}
+          {analysis.stackInconsistencies.length > 0 && (
+            <span className="ml-2 text-[10px] text-yellow-500">
+              ⚠ 스택 조정 실패 {analysis.stackInconsistencies.length}건
+            </span>
+          )}
+        </h3>
+        <button
+          onClick={() => setShowAll(v => !v)}
+          className="text-xs px-2 py-1 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded"
+        >
+          {showAll ? '간단히' : '모든 약점 보기'}
+        </button>
+      </div>
+
+      {analysis.top3.length === 0 && !showAll && (
+        <div className="text-center text-xs text-gray-500 py-3 bg-gray-800/30 rounded">
+          현저한 약점 없음 (각 카테고리 오답 2건 미만)
+        </div>
+      )}
+
+      {!showAll && analysis.top3.length > 0 && (
+        <div className="space-y-2">
+          {analysis.top3.map(s => (
+            <WeaknessCard key={s.weaknessId} s={s} onNavigate={onNavigate} />
+          ))}
+        </div>
+      )}
+
+      {showAll && (
+        <>
+          <div className="flex flex-wrap gap-1 mb-2">
+            <button
+              onClick={() => setTagFilter(null)}
+              className={`text-[10px] px-2 py-0.5 rounded ${tagFilter === null ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+            >
+              전체
+            </button>
+            {ALL_TAGS.map(t => (
+              <button
+                key={t}
+                onClick={() => setTagFilter(t)}
+                className={`text-[10px] px-2 py-0.5 rounded ${tagFilter === t ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+          <WeaknessAllTable analysis={analysis} onNavigate={onNavigate} tagFilter={tagFilter} />
+        </>
+      )}
+    </div>
+  );
+}
+
+function ErrorTable({
+  records,
+  onReview,
+}: {
+  records: QuizRecord[];
+  onReview: (r: QuizRecord) => void;
+}) {
+  if (records.length === 0) return null;
+  return (
+    <div className="w-full">
+      <h3 className="text-sm font-medium text-gray-400 mb-2">오답 목록 ({records.length}건)</h3>
+      <div className="space-y-1">
+        {records.slice(0, 50).map((r, i) => (
+          <div key={i} className="bg-gray-800/50 rounded px-2 py-1.5 flex items-center gap-2 text-xs">
+            <span className="text-gray-500 font-mono w-12 shrink-0">{r.question.stackSize}</span>
+            <span className="text-white font-bold w-10 shrink-0">{r.question.hand}</span>
+            <span className="text-gray-400 flex-1 truncate">{r.question.situation || r.question.chartName}</span>
+            <span
+              className="px-1.5 py-0.5 rounded text-[10px] font-medium line-through opacity-60 shrink-0"
+              style={{
+                backgroundColor: ACTION_COLORS[r.userAnswer]?.bg || '#374151',
+                color: ACTION_COLORS[r.userAnswer]?.text || '#d1d5db',
+              }}
+            >
+              {actionLabel(r.userAnswer)}
+            </span>
+            <span className="text-gray-600 shrink-0">→</span>
+            <span
+              className="px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0"
+              style={{
+                backgroundColor: ACTION_COLORS[r.question.correctAction]?.bg || '#374151',
+                color: ACTION_COLORS[r.question.correctAction]?.text || '#d1d5db',
+              }}
+            >
+              {actionLabel(r.question.correctAction)}
+            </span>
+            <button
+              onClick={() => onReview(r)}
+              className="shrink-0 px-2 py-0.5 bg-gray-700 hover:bg-indigo-600 text-gray-200 hover:text-white rounded text-[10px] font-medium transition-colors"
+            >
+              복습
+            </button>
+          </div>
+        ))}
+        {records.length > 50 && (
+          <div className="text-center text-xs text-gray-500 mt-2">
+            최신 50건만 표시 (총 {records.length}건)
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ChartPreview({ chartData, chartName }: { chartData: Record<string, string[]>; chartName: string }) {
   const handAction = useMemo(() => buildHandAction(chartData), [chartData]);
   const { legendItems, totalNonFold } = useMemo(() => buildActionStats(handAction), [handAction]);
@@ -223,12 +508,18 @@ function ChartPreview({ chartData, chartName }: { chartData: Record<string, stri
   );
 }
 
-export function QuizStatsPage({ data }: { data: AllData }) {
+interface QuizStatsPageProps {
+  data: AllData;
+  onNavigate: (intent: NavigateIntent) => void;
+}
+
+export function QuizStatsPage({ data, onNavigate }: QuizStatsPageProps) {
   const [records, setRecords] = useState<QuizRecord[]>(() => loadQuizRecords());
   const [filter, setFilter] = useState<Filter>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const deviation = useMemo(() => computeDeviationStats(records), [records]);
+  const profile = useMemo(() => analyzeQuizResults(records), [records]);
 
   const stats = useMemo(() => {
     if (records.length === 0) return null;
@@ -322,8 +613,14 @@ export function QuizStatsPage({ data }: { data: AllData }) {
     return (
       <div className="flex flex-col items-center gap-4">
         <h2 className="text-lg font-bold text-white">퀴즈 통계</h2>
-        <p className="text-gray-500">아직 퀴즈 기록이 없습니다.</p>
+        <p className="text-gray-500">아직 푼 퀴즈가 없습니다. 먼저 퀴즈를 풀어보세요!</p>
         <div className="flex gap-2">
+          <button
+            onClick={() => onNavigate({ kind: 'quiz' })}
+            className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-500"
+          >
+            퀴즈 시작
+          </button>
           <label className="px-4 py-2 bg-gray-800 text-gray-300 rounded-lg text-sm cursor-pointer hover:bg-gray-700">
             기록 가져오기
             <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={handleImport} />
@@ -335,18 +632,20 @@ export function QuizStatsPage({ data }: { data: AllData }) {
 
   return (
     <div className="flex flex-col items-center gap-6 max-w-lg mx-auto">
-      <h2 className="text-lg font-bold text-white">퀴즈 통계</h2>
+      <h2 className="text-lg font-bold text-white">플레이어 프로파일</h2>
 
-<div className="w-full bg-gray-800/50 rounded-lg p-4 text-center">
-        <div className="text-3xl font-bold text-white">
-          {pct(stats.totalCorrect, records.length)}
-        </div>
-        <div className="text-sm text-gray-400 mt-1">
-          전체 정답률 ({stats.totalCorrect}/{records.length})
+      <HeaderCard profile={profile} />
+
+      <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-4">
+        <PlayStyleSection d={deviation} />
+        <div className="bg-gray-800/30 rounded-lg p-3 flex flex-col items-center">
+          <h3 className="text-sm font-medium text-gray-400 mb-2 self-start">에러 분포</h3>
+          <ErrorDonut buckets={profile.errorBuckets} />
         </div>
       </div>
 
-      <PlayStyleSection d={deviation} />
+      <WeaknessSection analysis={profile.weaknessAnalysis} onNavigate={onNavigate} />
+
 
 <div className="w-full">
         <h3 className="text-sm font-medium text-gray-400 mb-2">스택별 정답률</h3>
@@ -454,6 +753,11 @@ export function QuizStatsPage({ data }: { data: AllData }) {
           </div>
         </div>
       )}
+
+<ErrorTable
+        records={records.filter(r => !r.correct)}
+        onReview={r => onNavigate({ kind: 'review', question: r.question })}
+      />
 
 <div className="flex gap-2 flex-wrap justify-center pt-2">
         <button

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { ACTION_COLORS, POSITION_COLORS, STACK_SIZES } from '../constants';
 import { generateQuizQuestion, saveQuizRecord, actionLabel, loadQuizRecords } from '../utils/quiz';
 import type { QuizChartFilter } from '../utils/quiz';
@@ -40,6 +40,26 @@ export function QuizPage({ data }: Props) {
     setUserAnswer('');
     setPhase('question');
   }, [data, selectedStacks, chartFilter]);
+
+  // pendingReview: 통계 페이지에서 "복습" 버튼으로 넘어왔을 때 해당 문제 즉시 출제
+  useEffect(() => {
+    const pending = sessionStorage.getItem('pendingReview');
+    if (!pending) return;
+    sessionStorage.removeItem('pendingReview');
+    try {
+      const q = JSON.parse(pending) as QuizQuestion;
+      const chart = data[q.stackSize]?.[q.chartName];
+      if (!chart) return;
+      const actions = Object.keys(chart);
+      if (!actions.includes('fold')) actions.push('fold');
+      setQuestion(q);
+      setChoices(actions);
+      setUserAnswer('');
+      setPhase('question');
+    } catch {
+      /* ignore malformed */
+    }
+  }, [data]);
 
   const handleAnswer = (action: string) => {
     if (!question) return;
