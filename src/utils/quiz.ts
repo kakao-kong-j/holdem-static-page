@@ -1,6 +1,7 @@
 import type { AllData, StackSize, QuizQuestion, QuizRecord } from '../types';
 import { ACTION_COLORS } from '../constants';
 import { buildHandAction, forEachHand } from './hand';
+import { pickStratifiedBucket, computeBucketCounts } from './sampling';
 
 const STORAGE_KEY = 'holdem_quiz_records';
 
@@ -111,13 +112,37 @@ export function generateQuizQuestion(
   data: AllData,
   selectedStacks: StackSize[],
   chartFilter: QuizChartFilter,
+  records: QuizRecord[] = [],
 ): QuizResult | null {
-  const stack = pickRandom(selectedStacks);
-  const stackData = data[stack];
-  if (!stackData) return null;
+  if (selectedStacks.length === 0) return null;
 
-  const scenarios = getScenariosForStack(stackData, stack, chartFilter);
-  if (scenarios.length === 0) return null;
+  // Build (stack, chartType) bucket list restricted by user selection and filter,
+  // keeping only buckets that actually have scenarios.
+  const bucketTypes: ('open-range' | 'facing')[] =
+    chartFilter === 'both' ? ['open-range', 'facing'] : [chartFilter];
+  const bucketKeys: string[] = [];
+  const bucketScenarios = new Map<string, ChartScenario[]>();
+  for (const s of selectedStacks) {
+    const stackData = data[s];
+    if (!stackData) continue;
+    for (const t of bucketTypes) {
+      const list = getScenariosForStack(stackData, s, t);
+      if (list.length === 0) continue;
+      const key = `${s}|${t}`;
+      bucketKeys.push(key);
+      bucketScenarios.set(key, list);
+    }
+  }
+  if (bucketKeys.length === 0) return null;
+
+  const counts = computeBucketCounts(records);
+  const bucketKey = pickStratifiedBucket(bucketKeys, counts);
+  if (!bucketKey) return null;
+
+  const [stackPart] = bucketKey.split('|');
+  const stack = stackPart as StackSize;
+  const stackData = data[stack]!;
+  const scenarios = bucketScenarios.get(bucketKey)!;
 
   const scenario = pickRandom(scenarios);
   const chartData = stackData[scenario.chartName];

@@ -10,6 +10,7 @@ import {
   importRecords,
   actionLabel,
 } from '../utils/quiz';
+import { computeDeviationStats } from '../utils/stats';
 import type { AllData, QuizRecord } from '../types';
 
 type Filter = { type: 'stack'; value: string } | { type: 'position'; value: string } | null;
@@ -71,6 +72,69 @@ function WrongList({ records, data }: { records: QuizRecord[]; data: AllData }) 
   );
 }
 
+function formatDelta(v: number): string {
+  const sign = v > 0 ? '+' : '';
+  return `${sign}${v.toFixed(1)}%`;
+}
+
+function interpret(delta: number, positiveLabel: string, negativeLabel: string, neutralLabel = '균형'): string {
+  if (delta > 2) return positiveLabel;
+  if (delta < -2) return negativeLabel;
+  return neutralLabel;
+}
+
+function deltaColor(v: number): string {
+  if (v > 2) return 'text-orange-400';
+  if (v < -2) return 'text-sky-400';
+  return 'text-gray-300';
+}
+
+function PlayStyleSection({ d }: { d: ReturnType<typeof computeDeviationStats> }) {
+  if (!d) return null;
+  const lowSample = d.sampleSize < 100;
+  const tbLowSample = d.threebetSampleSize > 0 && d.threebetSampleSize < 50;
+
+  return (
+    <div className="w-full">
+      <h3 className="text-sm font-medium text-gray-400 mb-2">플레이 스타일 (GTO 대비 편차)</h3>
+      <div className="grid grid-cols-3 gap-2">
+        <div className="bg-gray-800/50 rounded p-3 text-center">
+          <div className="text-xs text-gray-500 mb-1">VPIP</div>
+          <div className={`text-lg font-bold ${deltaColor(d.vpipDelta)}`}>{formatDelta(d.vpipDelta)}</div>
+          <div className="text-xs text-gray-400 mt-0.5">{interpret(d.vpipDelta, '루즈', '타이트')}</div>
+        </div>
+        <div className="bg-gray-800/50 rounded p-3 text-center">
+          <div className="text-xs text-gray-500 mb-1">PFR</div>
+          <div className={`text-lg font-bold ${deltaColor(d.pfrDelta)}`}>{formatDelta(d.pfrDelta)}</div>
+          <div className="text-xs text-gray-400 mt-0.5">{interpret(d.pfrDelta, '어그로', '패시브')}</div>
+        </div>
+        <div className="bg-gray-800/50 rounded p-3 text-center">
+          <div className="text-xs text-gray-500 mb-1">3Bet</div>
+          {d.threebetDelta === null ? (
+            <>
+              <div className="text-lg font-bold text-gray-600">—</div>
+              <div className="text-xs text-gray-500 mt-0.5">데이터 없음</div>
+            </>
+          ) : (
+            <>
+              <div className={`text-lg font-bold ${deltaColor(d.threebetDelta)}`}>{formatDelta(d.threebetDelta)}</div>
+              <div className="text-xs text-gray-400 mt-0.5">{interpret(d.threebetDelta, '공격적', '소극적')}</div>
+            </>
+          )}
+        </div>
+      </div>
+      <div className="text-xs text-gray-500 mt-2 space-y-0.5">
+        <div>
+          샘플: 전체 {d.sampleSize}건{d.threebetSampleSize > 0 && `, Facing RFI ${d.threebetSampleSize}건`}
+          {lowSample && <span className="text-yellow-500 ml-1">⚠️ 100건 미만, 참고용</span>}
+          {!lowSample && tbLowSample && <span className="text-yellow-500 ml-1">⚠️ 3Bet 샘플 부족</span>}
+        </div>
+        <div>양수(+): GTO보다 자주함 / 음수(−): GTO보다 덜함</div>
+      </div>
+    </div>
+  );
+}
+
 function ChartPreview({ chartData, chartName }: { chartData: Record<string, string[]>; chartName: string }) {
   const handAction = useMemo(() => buildHandAction(chartData), [chartData]);
   const { legendItems, totalNonFold } = useMemo(() => buildActionStats(handAction), [handAction]);
@@ -88,6 +152,8 @@ export function QuizStatsPage({ data }: { data: AllData }) {
   const [records, setRecords] = useState<QuizRecord[]>(() => loadQuizRecords());
   const [filter, setFilter] = useState<Filter>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const deviation = useMemo(() => computeDeviationStats(records), [records]);
 
   const stats = useMemo(() => {
     if (records.length === 0) return null;
@@ -204,6 +270,8 @@ export function QuizStatsPage({ data }: { data: AllData }) {
           전체 정답률 ({stats.totalCorrect}/{records.length})
         </div>
       </div>
+
+      <PlayStyleSection d={deviation} />
 
 <div className="w-full">
         <h3 className="text-sm font-medium text-gray-400 mb-2">스택별 정답률</h3>

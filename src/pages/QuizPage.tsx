@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { ACTION_COLORS, POSITION_COLORS, STACK_SIZES } from '../constants';
-import { generateQuizQuestion, saveQuizRecord, actionLabel } from '../utils/quiz';
+import { generateQuizQuestion, saveQuizRecord, actionLabel, loadQuizRecords } from '../utils/quiz';
 import type { QuizChartFilter } from '../utils/quiz';
 import type { AllData, StackSize, QuizQuestion, QuizRecord } from '../types';
 
@@ -33,7 +33,7 @@ export function QuizPage({ data }: Props) {
   };
 
   const nextQuestion = useCallback(() => {
-    const result = generateQuizQuestion(data, selectedStacks, chartFilter);
+    const result = generateQuizQuestion(data, selectedStacks, chartFilter, loadQuizRecords());
     if (!result) return;
     setQuestion(result.question);
     setChoices(result.choices);
