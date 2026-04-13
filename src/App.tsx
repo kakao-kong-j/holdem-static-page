@@ -46,7 +46,6 @@ function App() {
         chartName: intent.chartName,
         viewType: intent.viewType,
       }));
-      // SbOpen은 25/40BB 비활성 — 그 경우 일반 open-range로 폴백
       const targetView: View =
         intent.viewType === 'sb-open' && SB_OPEN_DISABLED_STACKS.includes(intent.stack)
           ? 'open-range'

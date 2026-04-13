@@ -85,7 +85,7 @@ export interface DeviationStats {
   gtoThreebetCombos: number;
 }
 
-const STEAL_RFI_CHARTS = new Set(['CO RFI', 'BTN RFI', 'SB RFI', 'SB RFI BvB']);
+export const STEAL_RFI_CHARTS = new Set(['CO RFI', 'BTN RFI', 'SB RFI', 'SB RFI BvB']);
 
 // Charts where hero (SB/BB) faces a steal from a late-position opener (CO/BTN/SB).
 // Matches 15-40BB "... vs ... RFI" and 100BB "... vs ..." naming.

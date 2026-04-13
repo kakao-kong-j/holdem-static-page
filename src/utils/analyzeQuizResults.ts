@@ -1,8 +1,6 @@
 import type { QuizRecord, QuizQuestion, StackSize } from '../types';
-import { getChartContext, classifyAction } from './stats';
+import { getChartContext, classifyAction, STEAL_RFI_CHARTS } from './stats';
 import { WEAKNESS_MAP, type WeaknessId, type WeaknessMeta, type WeaknessCategory } from './weaknessMap';
-
-export type { WeaknessId, WeaknessMeta, WeaknessCategory };
 
 export type ErrorBucket =
   | 'tooTight_BB'
@@ -65,8 +63,6 @@ export interface WeaknessAnalysis {
   top3: WeaknessSummary[];
   stackInconsistencies: QuizRecord[];
 }
-
-const STEAL_RFI_CHARTS = new Set(['CO RFI', 'BTN RFI', 'SB RFI', 'SB RFI BvB']);
 
 export function classifyError(q: QuizQuestion, userAnswer: string): ErrorBucket {
   const correct = q.correctAction;
@@ -363,7 +359,7 @@ export function analyzeQuizResults(records: QuizRecord[]): PlayerProfile {
 // 24-category weakness classification
 // ============================================================
 
-const FOURTYBB_BVB_ACTIONS = new Set(['raise_call', 'raise_fold', 'raise4bet', 'limp_call', 'limp_raise', 'limp_fold']);
+const FORTY_BB_BVB_ACTIONS = new Set(['raise_call', 'raise_fold', 'raise4bet', 'limp_call', 'limp_raise', 'limp_fold']);
 const PREMIUM_HANDS = new Set(['AA', 'KK', 'QQ']);
 const EP_HEROES = new Set(['UTG', 'UTG+1']);
 const MP_HEROES = new Set(['UTG+2', 'LJ', 'HJ', 'UTG1/2', 'LJ/HJ']);
@@ -385,14 +381,15 @@ export function classifyWeakness(q: QuizQuestion, userAnswer: string): WeaknessI
   if (correct.startsWith('fourbet') && userAnswer !== correct) return 'C18_4bet_오판';
 
   // [D] 스택 특수 (구체적인 것 먼저 → 광범위 BvB는 마지막)
-  if (stack === '40BB' && FOURTYBB_BVB_ACTIONS.has(correct) && userAnswer !== correct) return 'D21_40BB_3bet후대응';
+  if (stack === '40BB' && FORTY_BB_BVB_ACTIONS.has(correct) && userAnswer !== correct) return 'D21_40BB_3bet후대응';
   if (stack === '100BB' && hero === 'SB' && correct === 'limp' && userAnswer !== 'limp') return 'D23_SB_림프';
   if (correct === 'allIn' && userAnswer !== 'allIn') {
     if (stack === '15BB') return 'D19_15BB_올인기준';
     if (stack === '25BB') return 'D20_25BB_올인';
   }
   if (stack === '100BB' && correct === 'call' && userAnswer !== 'call' && isRFI) return 'D22_100BB_플랫';
-  // 광범위 BvB 캐치올 (D21/D23 보다 뒤)
+  // 광범위 BvB 캐치올 — 더 구체적인 D21/D23 뒤, 일반 B/A 분기보다 우선
+  // (BvB 차트의 어떤 잔여 오답도 D24로 분류해 BvB-혼동 시그널을 명확히 함)
   if (['SB RFI BvB', 'BB vs SB'].some(n => chartName.includes(n))) return 'D24_BvB_혼동';
 
   // [B] Facing RFI
@@ -449,7 +446,7 @@ export function isWeaknessSpot(q: QuizQuestion, weaknessId: WeaknessId): boolean
     case 'C18_4bet_오판': return correct.startsWith('fourbet');
     case 'D19_15BB_올인기준': return stack === '15BB' && correct === 'allIn';
     case 'D20_25BB_올인': return stack === '25BB' && correct === 'allIn';
-    case 'D21_40BB_3bet후대응': return stack === '40BB' && FOURTYBB_BVB_ACTIONS.has(correct);
+    case 'D21_40BB_3bet후대응': return stack === '40BB' && FORTY_BB_BVB_ACTIONS.has(correct);
     case 'D22_100BB_플랫': return stack === '100BB' && isRFI && correct === 'call';
     case 'D23_SB_림프': return stack === '100BB' && hero === 'SB' && correct === 'limp';
     case 'D24_BvB_혼동': return ['SB RFI BvB', 'BB vs SB'].some(n => chartName.includes(n));

@@ -265,6 +265,32 @@ function severityBadge(severity: number): { label: string; cls: string } {
   return { label: '하', cls: 'bg-gray-800/60 text-gray-400' };
 }
 
+function ChartLinkButton({
+  chartLink, onNavigate, label = '차트 보기', variant = 'primary',
+}: {
+  chartLink: { stack: import('../types').StackSize; chartName: string; viewType: 'open-range' | 'sb-open' | 'facing' };
+  onNavigate: (i: NavigateIntent) => void;
+  label?: string;
+  variant?: 'primary' | 'subtle';
+}) {
+  const cls = variant === 'subtle'
+    ? 'px-2 py-0.5 text-[10px] bg-gray-700 hover:bg-indigo-600 text-gray-200'
+    : 'px-2.5 py-1 text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-medium';
+  return (
+    <button
+      onClick={() => onNavigate({
+        kind: 'chart',
+        stack: chartLink.stack,
+        chartName: chartLink.chartName,
+        viewType: chartLink.viewType,
+      })}
+      className={`shrink-0 rounded ${cls}`}
+    >
+      {label}
+    </button>
+  );
+}
+
 function WeaknessCard({
   s, onNavigate,
 }: {
@@ -291,17 +317,7 @@ function WeaknessCard({
             ))}
           </div>
         </div>
-        <button
-          onClick={() => onNavigate({
-            kind: 'chart',
-            stack: s.meta.chartLink.stack,
-            chartName: s.meta.chartLink.chartName,
-            viewType: s.meta.chartLink.viewType,
-          })}
-          className="shrink-0 px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-medium"
-        >
-          차트 보기
-        </button>
+        <ChartLinkButton chartLink={s.meta.chartLink} onNavigate={onNavigate} />
       </div>
     </div>
   );
@@ -314,23 +330,25 @@ function WeaknessAllTable({
   onNavigate: (i: NavigateIntent) => void;
   tagFilter: string | null;
 }) {
-  const ids = Object.keys(WEAKNESS_MAP) as Exclude<WeaknessId, 'other'>[];
-  const rows = ids
-    .filter(id => !tagFilter || WEAKNESS_MAP[id].tag.includes(tagFilter))
-    .map(id => {
-      const b = analysis.byWeakness[id];
-      return {
-        id,
-        meta: WEAKNESS_MAP[id],
-        errorCount: b?.errorCount ?? 0,
-        spotCount: b?.spotCount ?? 0,
-        severity: b?.severity ?? 0,
-      };
-    })
-    .sort((a, b) => {
-      if (b.errorCount !== a.errorCount) return b.errorCount - a.errorCount;
-      return a.id.localeCompare(b.id);
-    });
+  const rows = useMemo(() => {
+    const ids = Object.keys(WEAKNESS_MAP) as Exclude<WeaknessId, 'other'>[];
+    return ids
+      .filter(id => !tagFilter || WEAKNESS_MAP[id].tag.includes(tagFilter))
+      .map(id => {
+        const b = analysis.byWeakness[id];
+        return {
+          id,
+          meta: WEAKNESS_MAP[id],
+          errorCount: b?.errorCount ?? 0,
+          spotCount: b?.spotCount ?? 0,
+          severity: b?.severity ?? 0,
+        };
+      })
+      .sort((a, b) => {
+        if (b.errorCount !== a.errorCount) return b.errorCount - a.errorCount;
+        return a.id.localeCompare(b.id);
+      });
+  }, [analysis, tagFilter]);
 
   return (
     <div className="w-full text-xs">
@@ -347,17 +365,7 @@ function WeaknessAllTable({
               {r.errorCount}/{r.spotCount}
             </span>
             <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${sev.cls}`}>{sev.label}</span>
-            <button
-              onClick={() => onNavigate({
-                kind: 'chart',
-                stack: r.meta.chartLink.stack,
-                chartName: r.meta.chartLink.chartName,
-                viewType: r.meta.chartLink.viewType,
-              })}
-              className="px-2 py-0.5 bg-gray-700 hover:bg-indigo-600 text-gray-200 rounded text-[10px]"
-            >
-              차트
-            </button>
+            <ChartLinkButton chartLink={r.meta.chartLink} onNavigate={onNavigate} label="차트" variant="subtle" />
           </div>
         );
       })}
