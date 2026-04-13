@@ -10,6 +10,8 @@ import {
   importRecords,
   actionLabel,
 } from '../utils/quiz';
+import { computeDeviationStats } from '../utils/stats';
+import { HexagonRadar, type HexagonAxis } from '../components/HexagonRadar';
 import type { AllData, QuizRecord } from '../types';
 
 type Filter = { type: 'stack'; value: string } | { type: 'position'; value: string } | null;
@@ -71,6 +73,143 @@ function WrongList({ records, data }: { records: QuizRecord[]; data: AllData }) 
   );
 }
 
+function formatDelta(v: number): string {
+  const sign = v > 0 ? '+' : '';
+  return `${sign}${v.toFixed(1)}%`;
+}
+
+function interpret(delta: number, positiveLabel: string, negativeLabel: string, neutralLabel = '균형'): string {
+  if (delta > 2) return positiveLabel;
+  if (delta < -2) return negativeLabel;
+  return neutralLabel;
+}
+
+function deltaColor(v: number): string {
+  if (v > 2) return 'text-orange-400';
+  if (v < -2) return 'text-sky-400';
+  return 'text-gray-300';
+}
+
+function PlayStyleSection({ d }: { d: ReturnType<typeof computeDeviationStats> }) {
+  if (!d) return null;
+  const lowSample = d.sampleSize < 100;
+
+  const axes: HexagonAxis[] = [
+    {
+      key: 'vpip',
+      label: 'VPIP',
+      value: d.vpipDelta,
+      positiveLabel: '루즈',
+      negativeLabel: '타이트',
+      sampleSize: d.sampleSize,
+      description: '자발적으로 팟에 투입한 비율. 폴드가 아닌 모든 액션(콜/레이즈/림프/셔브)을 콤보 가중으로 합산.',
+      userValue: d.userVpipPct,
+      gtoValue: d.gtoVpipPct,
+      unit: '%',
+    },
+    {
+      key: 'pfr',
+      label: 'PFR',
+      value: d.pfrDelta,
+      positiveLabel: '어그로',
+      negativeLabel: '패시브',
+      sampleSize: d.sampleSize,
+      description: '프리플랍 레이즈 비율. 레이즈/셔브/3벳 등 공격 액션만 카운트 (콜·림프 제외).',
+      userValue: d.userPfrPct,
+      gtoValue: d.gtoPfrPct,
+      unit: '%',
+    },
+    {
+      key: 'threebet',
+      label: '3Bet',
+      value: d.threebetDelta,
+      positiveLabel: '공격적',
+      negativeLabel: '소극적',
+      sampleSize: d.threebetSampleSize,
+      description: 'Facing RFI 상황에서 3벳(리레이즈) 비율. 15~40BB에선 allIn 3벳 셔브도 포함.',
+      userValue: d.userThreebetPct,
+      gtoValue: d.gtoThreebetPct,
+      unit: '%',
+    },
+    {
+      key: 'coldcall',
+      label: 'Cold Call',
+      value: d.coldCallDelta,
+      positiveLabel: '콜링',
+      negativeLabel: '덜 콜',
+      sampleSize: d.coldCallSampleSize,
+      description: 'Facing RFI에서 콜드 콜 비율. 높으면 콜링 스테이션 성향, 낮으면 3벳/폴드 편향.',
+      userValue: d.userColdCallPct,
+      gtoValue: d.gtoColdCallPct,
+      unit: '%',
+    },
+    {
+      key: 'steal',
+      label: 'Steal',
+      value: d.stealDelta,
+      positiveLabel: '자주 스틸',
+      negativeLabel: '소극적',
+      sampleSize: d.stealSampleSize,
+      description: 'CO/BTN/SB RFI에서 오픈(레이즈·셔브) 비율. 레이트 포지션의 블라인드 훔치기 어그레션.',
+      userValue: d.userStealPct,
+      gtoValue: d.gtoStealPct,
+      unit: '%',
+    },
+    {
+      key: 'foldToSteal',
+      label: 'Fold to Steal',
+      value: d.foldToStealDelta,
+      positiveLabel: '과폴드',
+      negativeLabel: '오버디펜드',
+      sampleSize: d.foldToStealSampleSize,
+      description: 'SB/BB에서 CO/BTN/SB의 스틸 오픈을 마주쳤을 때 폴드 비율. 양수면 GTO보다 많이 접음(익스플로잇 당하기 쉬움).',
+      userValue: d.userFoldToStealPct,
+      gtoValue: d.gtoFoldToStealPct,
+      unit: '%',
+    },
+  ];
+
+  return (
+    <div className="w-full">
+      <h3 className="text-sm font-medium text-gray-400 mb-2">플레이 스타일 (GTO 대비 편차)</h3>
+      <div className="bg-gray-800/30 rounded-lg p-3 flex flex-col items-center relative">
+        <HexagonRadar axes={axes} />
+        <div className="text-xs text-gray-500 mt-1 text-center">
+          라벨에 커서/터치하면 상세 보임 · 중심선 = GTO 일치
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-1.5 mt-2">
+        {axes.map(a => (
+          <div key={a.key} className="bg-gray-800/50 rounded px-2 py-1.5 flex items-center justify-between text-xs">
+            <span className="text-gray-400">{a.label}</span>
+            <span className="flex items-center gap-2">
+              {a.value === null ? (
+                <span className="text-gray-600">데이터 없음</span>
+              ) : (
+                <>
+                  <span className="text-gray-400">
+                    {interpret(a.value, a.positiveLabel, a.negativeLabel)}
+                  </span>
+                  <span className={`font-bold ${deltaColor(a.value)} w-14 text-right`}>
+                    {formatDelta(a.value)}
+                  </span>
+                </>
+              )}
+            </span>
+          </div>
+        ))}
+      </div>
+      <div className="text-xs text-gray-500 mt-2 space-y-0.5">
+        <div>
+          샘플 {d.sampleSize}건
+          {lowSample && <span className="text-yellow-500 ml-1">⚠️ 100건 미만, 참고용</span>}
+        </div>
+        <div>양수(+): GTO보다 자주함 / 음수(−): GTO보다 덜함</div>
+      </div>
+    </div>
+  );
+}
+
 function ChartPreview({ chartData, chartName }: { chartData: Record<string, string[]>; chartName: string }) {
   const handAction = useMemo(() => buildHandAction(chartData), [chartData]);
   const { legendItems, totalNonFold } = useMemo(() => buildActionStats(handAction), [handAction]);
@@ -88,6 +227,8 @@ export function QuizStatsPage({ data }: { data: AllData }) {
   const [records, setRecords] = useState<QuizRecord[]>(() => loadQuizRecords());
   const [filter, setFilter] = useState<Filter>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const deviation = useMemo(() => computeDeviationStats(records), [records]);
 
   const stats = useMemo(() => {
     if (records.length === 0) return null;
@@ -204,6 +345,8 @@ export function QuizStatsPage({ data }: { data: AllData }) {
           전체 정답률 ({stats.totalCorrect}/{records.length})
         </div>
       </div>
+
+      <PlayStyleSection d={deviation} />
 
 <div className="w-full">
         <h3 className="text-sm font-medium text-gray-400 mb-2">스택별 정답률</h3>
