@@ -82,12 +82,36 @@ describe('classifyError', () => {
     expect(classifyError(q, 'threebet_value')).toBe('overAggressive');
   });
 
-  it('other: 정답인 경우 (분류 밖)', () => {
+  it('other: 정답이면 분류 안 함 (호출되어도 other)', () => {
     const q = makeRecord({
       chartName: 'UTG RFI', heroPosition: 'UTG',
       correctAction: 'raise', userAnswer: 'raise',
     }).question;
     expect(classifyError(q, 'raise')).toBe('other');
+  });
+
+  it('tooPassive: 15BB allIn(셔브) 자리에서 fold가 아닌 call', () => {
+    const q = makeRecord({
+      stack: '15BB', chartName: 'CO vs UTG RFI', heroPosition: 'CO', villainPosition: 'UTG',
+      correctAction: 'allIn', userAnswer: 'call',
+    }).question;
+    expect(classifyError(q, 'call')).toBe('tooPassive');
+  });
+
+  it('tooPassive: GTO raise_bluff인데 user call', () => {
+    const q = makeRecord({
+      stack: '100BB', chartName: 'SB RFI', heroPosition: 'SB',
+      correctAction: 'raise_bluff', userAnswer: 'call',
+    }).question;
+    expect(classifyError(q, 'call')).toBe('tooPassive');
+  });
+
+  it('overAggressive: GTO call인데 user allIn (3벳 셔브)', () => {
+    const q = makeRecord({
+      stack: '15BB', chartName: 'HJ vs UTG RFI', heroPosition: 'HJ', villainPosition: 'UTG',
+      correctAction: 'call', userAnswer: 'allIn',
+    }).question;
+    expect(classifyError(q, 'allIn')).toBe('overAggressive');
   });
 
   it('Facing RFI에서 BB가 과폴드: tooTight_BB 우선', () => {
@@ -286,13 +310,26 @@ describe('analyzeQuizResults', () => {
     expect(p.priorities.length).toBe(0);
   });
 
-  it('정답 레코드만 → 모두 other 버킷, priorities 없음', () => {
+  it('정답 레코드만 → 어떤 버킷에도 들어가지 않음 (correct 스킵)', () => {
     const records = [
       makeRecord({ chartName: 'UTG RFI', correctAction: 'raise', userAnswer: 'raise' }),
     ];
     const p = analyzeQuizResults(records);
     expect(p.accuracy).toBe(1);
-    expect(p.errorBuckets.other.length).toBe(1);
+    expect(p.errorBuckets.other.length).toBe(0);
+    expect(p.errorBuckets.tooLoose.length).toBe(0);
     expect(p.priorities.length).toBe(0);
+  });
+
+  it('도넛 합계 = 실제 오답 수 (other 포함하면 일치)', () => {
+    const records = [
+      makeRecord({ chartName: 'UTG RFI', correctAction: 'raise', userAnswer: 'raise' }), // 정답
+      makeRecord({ chartName: 'UTG RFI', correctAction: 'raise', userAnswer: 'fold' }),  // tooTight_RFI
+      makeRecord({ chartName: 'BTN RFI', correctAction: 'fold', userAnswer: 'raise' }),  // tooLoose
+    ];
+    const p = analyzeQuizResults(records);
+    const wrong = records.filter(r => !r.correct).length;
+    const bucketSum = Object.values(p.errorBuckets).reduce((a, b) => a + b.length, 0);
+    expect(bucketSum).toBe(wrong); // 모든 오답이 어느 버킷엔 들어감
   });
 });

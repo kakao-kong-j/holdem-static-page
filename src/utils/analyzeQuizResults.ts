@@ -40,29 +40,33 @@ export interface PlayerProfile {
   priorities: Priority[];
 }
 
-const PASSIVE_CORRECT_FOR_PASSIVE_ERROR = new Set([
-  'threebet', 'threebet_value', 'threebet_bluff', 'allIn', 'raise',
-]);
-
 const STEAL_RFI_CHARTS = new Set(['CO RFI', 'BTN RFI', 'SB RFI', 'SB RFI BvB']);
 
 export function classifyError(q: QuizQuestion, userAnswer: string): ErrorBucket {
   const correct = q.correctAction;
-  const isFacingRFI = getChartContext(q.chartName) === 'facing-rfi';
-
   if (userAnswer === correct) return 'other';
 
+  const isFacingRFI = getChartContext(q.chartName) === 'facing-rfi';
+  const userBuckets = classifyAction(userAnswer, { isFacingRFI, stack: q.stackSize });
+  const gtoBuckets = classifyAction(correct, { isFacingRFI, stack: q.stackSize });
+
+  // 1. fold should not have been fold
   if (userAnswer === 'fold' && correct !== 'fold') {
     if (q.heroPosition === 'BB') return 'tooTight_BB';
     if (!isFacingRFI) return 'tooTight_RFI';
     if (correct.includes('bluff')) return 'missedBluff';
     return 'tooTight_RFI';
   }
+  // 2. should have folded but didn't
   if (userAnswer !== 'fold' && correct === 'fold') return 'tooLoose';
-  if (userAnswer === 'call' && PASSIVE_CORRECT_FOR_PASSIVE_ERROR.has(correct)) {
-    return 'tooPassive';
-  }
-  if (userAnswer.startsWith('threebet') && correct === 'call') return 'overAggressive';
+
+  // 3. should have raised/3bet but only called or limped
+  // gto wants any aggressive action (PFR family) and user picked passive (call/limp)
+  if (gtoBuckets.pfr && !userBuckets.pfr) return 'tooPassive';
+
+  // 4. should have called but raised/3bet
+  if (correct === 'call' && userBuckets.pfr) return 'overAggressive';
+
   return 'other';
 }
 
@@ -77,6 +81,7 @@ function bucketErrors(records: QuizRecord[]): ErrorBuckets {
     other: [],
   };
   for (const r of records) {
+    if (r.correct) continue; // 정답은 'other'에 섞지 않음 (분류 불가 에러만 'other')
     const b = classifyError(r.question, r.userAnswer);
     buckets[b].push(r);
   }

@@ -5,13 +5,14 @@ interface Props {
   size?: number;
 }
 
-const BUCKET_META: { key: Exclude<ErrorBucket, 'other'>; label: string; color: string }[] = [
+const BUCKET_META: { key: ErrorBucket; label: string; color: string }[] = [
   { key: 'tooTight_BB',    label: 'BB 과폴드',    color: '#60a5fa' },
   { key: 'tooTight_RFI',   label: 'RFI 과폴드',   color: '#38bdf8' },
   { key: 'missedBluff',    label: '블러프 놓침',   color: '#a78bfa' },
   { key: 'tooLoose',       label: '과플레이',     color: '#fb923c' },
   { key: 'tooPassive',     label: '패시브',       color: '#fbbf24' },
   { key: 'overAggressive', label: '과공격',       color: '#f87171' },
+  { key: 'other',          label: '기타',         color: '#6b7280' },
 ];
 
 export function ErrorDonut({ buckets, size = 200 }: Props) {
