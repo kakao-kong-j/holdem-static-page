@@ -238,4 +238,158 @@ describe('computeDeviationStats', () => {
     expect(s.threebetSampleSize).toBe(1);
     expect(s.threebetTotalCombos).toBe(6); // only facing record
   });
+
+  // --- Cold Call ---
+  it('Cold Call: Facing-RFI call 콤보 편차', () => {
+    // user call, gto raise → user cold call +, gto 0 → +100%
+    const r = makeRecord({ hand: 'AA', chartName: 'HJ vs UTG', correctAction: 'threebet_value', userAnswer: 'call' });
+    const s = computeDeviationStats([r])!;
+    expect(s.coldCallDelta).toBeCloseTo(100);
+    expect(s.coldCallSampleSize).toBe(1);
+  });
+
+  it('Cold Call: RFI 차트는 분모에 포함 안 됨', () => {
+    const r = makeRecord({ hand: 'AA', chartName: 'UTG RFI', correctAction: 'raise', userAnswer: 'call' });
+    const s = computeDeviationStats([r])!;
+    expect(s.coldCallDelta).toBeNull();
+    expect(s.coldCallSampleSize).toBe(0);
+  });
+
+  // --- Steal ---
+  it('Steal: CO/BTN/SB RFI에서 PFR 편차', () => {
+    // user raise, gto fold → +100%
+    const r = makeRecord({ hand: '72o', chartName: 'BTN RFI', correctAction: 'fold', userAnswer: 'raise' });
+    const s = computeDeviationStats([r])!;
+    expect(s.stealDelta).toBeCloseTo(100);
+    expect(s.stealSampleSize).toBe(1);
+  });
+
+  it('Steal: CO RFI도 포함', () => {
+    const r = makeRecord({ hand: '72o', chartName: 'CO RFI', correctAction: 'fold', userAnswer: 'raise' });
+    const s = computeDeviationStats([r])!;
+    expect(s.stealSampleSize).toBe(1);
+  });
+
+  it('Steal: SB RFI BvB도 포함', () => {
+    const r = makeRecord({ hand: '72o', chartName: 'SB RFI BvB', correctAction: 'fold', userAnswer: 'raise' });
+    const s = computeDeviationStats([r])!;
+    expect(s.stealSampleSize).toBe(1);
+  });
+
+  it('Steal: UTG RFI는 포함 안 됨', () => {
+    const r = makeRecord({ hand: '72o', chartName: 'UTG RFI', correctAction: 'fold', userAnswer: 'raise' });
+    const s = computeDeviationStats([r])!;
+    expect(s.stealSampleSize).toBe(0);
+    expect(s.stealDelta).toBeNull();
+  });
+
+  // --- Fold to Steal ---
+  it('Fold to Steal: SB vs BTN에서 user fold, gto raise → +100%', () => {
+    const r = makeRecord({ hand: 'AA', chartName: 'SB vs BTN', correctAction: 'threebet_value', userAnswer: 'fold' });
+    const s = computeDeviationStats([r])!;
+    expect(s.foldToStealDelta).toBeCloseTo(100);
+    expect(s.foldToStealSampleSize).toBe(1);
+  });
+
+  it('Fold to Steal: 15BB SB vs CO RFI도 포함', () => {
+    const r = makeRecord({
+      hand: 'AA', stack: '15BB', chartName: 'SB vs CO RFI',
+      correctAction: 'allIn', userAnswer: 'fold',
+    });
+    const s = computeDeviationStats([r])!;
+    expect(s.foldToStealSampleSize).toBe(1);
+  });
+
+  it('Fold to Steal: 100BB BB vs SB (SB steal) 포함', () => {
+    const r = makeRecord({ hand: '72o', chartName: 'BB vs SB', correctAction: 'fold', userAnswer: 'fold' });
+    const s = computeDeviationStats([r])!;
+    expect(s.foldToStealSampleSize).toBe(1);
+    expect(s.foldToStealDelta).toBeCloseTo(0); // both fold
+  });
+
+  it('Fold to Steal: SB vs UTG RFI는 포함 안 됨 (UTG는 스틸 아님)', () => {
+    const r = makeRecord({ hand: 'AA', chartName: 'SB vs UTG RFI', correctAction: 'threebet', userAnswer: 'fold' });
+    const s = computeDeviationStats([r])!;
+    expect(s.foldToStealSampleSize).toBe(0);
+    expect(s.foldToStealDelta).toBeNull();
+  });
+
+  it('Fold to Steal: CO vs BTN은 포함 안 됨 (hero가 SB/BB 아님)', () => {
+    const r = makeRecord({ hand: 'AA', chartName: 'CO vs BTN', correctAction: 'fold', userAnswer: 'fold' });
+    const s = computeDeviationStats([r])!;
+    expect(s.foldToStealSampleSize).toBe(0);
+  });
+
+  it('Fold to Steal: 절대값 user/gto fold%', () => {
+    const records = [
+      makeRecord({ hand: 'AA', chartName: 'SB vs BTN', correctAction: 'threebet_value', userAnswer: 'fold' }),
+      makeRecord({ hand: '72o', chartName: 'BB vs CO', correctAction: 'fold', userAnswer: 'fold' }),
+    ];
+    const s = computeDeviationStats(records)!;
+    // user fold combos = 6 + 12 = 18, gto fold combos = 0 + 12 = 12, total = 18
+    // user = 100%, gto = 66.7%
+    expect(s.userFoldToStealPct).toBeCloseTo(100);
+    expect(s.gtoFoldToStealPct).toBeCloseTo((12 / 18) * 100, 1);
+    expect(s.foldToStealDelta).toBeCloseTo(((18 - 12) / 18) * 100, 1);
+  });
+
+  // --- Absolute values ---
+  it('절대값: VPIP user=100%, gto=100% (둘 다 raise)', () => {
+    const r = makeRecord({ hand: 'AA', chartName: 'UTG RFI', correctAction: 'raise', userAnswer: 'raise' });
+    const s = computeDeviationStats([r])!;
+    expect(s.userVpipPct).toBeCloseTo(100);
+    expect(s.gtoVpipPct).toBeCloseTo(100);
+    expect(s.userPfrPct).toBeCloseTo(100);
+    expect(s.gtoPfrPct).toBeCloseTo(100);
+  });
+
+  it('절대값: user=call gto=raise → user VPIP 100%, PFR 0%, gto VPIP 100%, PFR 100%', () => {
+    const r = makeRecord({ hand: 'AA', chartName: 'UTG RFI', correctAction: 'raise', userAnswer: 'call' });
+    const s = computeDeviationStats([r])!;
+    expect(s.userVpipPct).toBeCloseTo(100);
+    expect(s.gtoVpipPct).toBeCloseTo(100);
+    expect(s.userPfrPct).toBeCloseTo(0);
+    expect(s.gtoPfrPct).toBeCloseTo(100);
+  });
+
+  it('절대값: 3Bet (Facing-RFI 분모)', () => {
+    const r = makeRecord({
+      hand: 'AA', chartName: 'HJ vs UTG', correctAction: 'call', userAnswer: 'threebet_value',
+    });
+    const s = computeDeviationStats([r])!;
+    expect(s.userThreebetPct).toBeCloseTo(100);
+    expect(s.gtoThreebetPct).toBeCloseTo(0);
+  });
+
+  it('절대값: Cold Call', () => {
+    const r = makeRecord({
+      hand: 'AA', chartName: 'HJ vs UTG', correctAction: 'threebet_value', userAnswer: 'call',
+    });
+    const s = computeDeviationStats([r])!;
+    expect(s.userColdCallPct).toBeCloseTo(100);
+    expect(s.gtoColdCallPct).toBeCloseTo(0);
+  });
+
+  it('절대값: Steal (CO RFI에서 open/fold)', () => {
+    const r = makeRecord({ hand: '72o', chartName: 'CO RFI', correctAction: 'fold', userAnswer: 'raise' });
+    const s = computeDeviationStats([r])!;
+    expect(s.userStealPct).toBeCloseTo(100);
+    expect(s.gtoStealPct).toBeCloseTo(0);
+  });
+
+  it('절대값: Fold to Steal null if no relevant records', () => {
+    const r = makeRecord({ hand: 'AA', chartName: 'UTG RFI', correctAction: 'raise', userAnswer: 'raise' });
+    const s = computeDeviationStats([r])!;
+    expect(s.userFoldToStealPct).toBeNull();
+    expect(s.gtoFoldToStealPct).toBeNull();
+  });
+
+  it('절대값: Facing 없으면 3Bet/ColdCall의 user/gto 모두 null', () => {
+    const r = makeRecord({ hand: 'AA', chartName: 'UTG RFI', correctAction: 'raise', userAnswer: 'raise' });
+    const s = computeDeviationStats([r])!;
+    expect(s.userThreebetPct).toBeNull();
+    expect(s.gtoThreebetPct).toBeNull();
+    expect(s.userColdCallPct).toBeNull();
+    expect(s.gtoColdCallPct).toBeNull();
+  });
 });
