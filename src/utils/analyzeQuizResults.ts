@@ -1,5 +1,5 @@
 import type { QuizRecord, QuizQuestion, StackSize } from '../types';
-import { getChartContext } from './stats';
+import { getChartContext, classifyAction } from './stats';
 
 export type ErrorBucket =
   | 'tooTight_BB'
@@ -112,6 +112,9 @@ export function computeMetrics(records: QuizRecord[]): Metrics {
     const gto = q.correctAction;
     const user = r.userAnswer;
     const ctx = getChartContext(q.chartName);
+    const actionCtx = { isFacingRFI: ctx === 'facing-rfi', stack: q.stackSize };
+    const userBuckets = classifyAction(user, actionCtx);
+    const gtoBuckets = classifyAction(gto, actionCtx);
 
     // Track position accuracy (skip blank positions)
     if (q.heroPosition) {
@@ -119,22 +122,22 @@ export function computeMetrics(records: QuizRecord[]): Metrics {
       if (r.correct) posCorrect.set(q.heroPosition, (posCorrect.get(q.heroPosition) ?? 0) + 1);
     }
 
-    // VPIP compliance
-    if (gto !== 'fold') {
+    // VPIP compliance: GTO가 폴드 아닌 스팟에서 user도 폴드 아님
+    if (gtoBuckets.vpip) {
       vpipDenom++;
-      if (user !== 'fold') vpipNum++;
+      if (userBuckets.vpip) vpipNum++;
     }
 
-    // PFR compliance (RFI 차트 기준)
-    if (ctx === 'rfi' && gto === 'raise') {
+    // PFR compliance: RFI 차트에서 GTO가 PFR (raise/allIn/raise_bluff 등) 액션
+    if (ctx === 'rfi' && gtoBuckets.pfr) {
       pfrDenom++;
-      if (user === 'raise') pfrNum++;
+      if (userBuckets.pfr) pfrNum++;
     }
 
-    // Over-3bet Rate (Facing-RFI, GTO가 call일 때 user가 threebet* 선택)
+    // Over-3bet Rate (Facing-RFI, GTO가 call일 때 user가 threebet 계열 선택)
     if (ctx === 'facing-rfi' && gto === 'call') {
       over3betDenom++;
-      if (user.startsWith('threebet')) over3betNum++;
+      if (userBuckets.threebet) over3betNum++;
     }
 
     // Missed Bluff Rate (GTO가 *bluff* 액션인데 user가 fold)
@@ -143,26 +146,26 @@ export function computeMetrics(records: QuizRecord[]): Metrics {
       if (user === 'fold') bluffMissedNum++;
     }
 
-    // Cold Call compliance (GTO === 'call')
-    if (gto === 'call') {
+    // Cold Call compliance (Facing-RFI에서 GTO가 'call')
+    if (ctx === 'facing-rfi' && gto === 'call') {
       ccDenom++;
       if (user === 'call') ccNum++;
     }
 
-    // Steal compliance (CO/BTN/SB RFI에서 GTO가 raise)
-    if (STEAL_RFI_CHARTS.has(q.chartName) && gto === 'raise') {
+    // Steal compliance: CO/BTN/SB RFI에서 GTO가 PFR (15BB allIn, 100BB raise/raise_bluff 모두 포함)
+    if (STEAL_RFI_CHARTS.has(q.chartName) && gtoBuckets.pfr) {
       stealDenom++;
-      if (user === 'raise') stealNum++;
+      if (userBuckets.pfr) stealNum++;
     }
 
     // deviation aggregates (no combo weight — reuse record-unit)
     totalCombos++;
-    if (gto !== 'fold') gtoPlayCombos++;
-    if (user !== 'fold') userPlayCombos++;
+    if (gtoBuckets.vpip) gtoPlayCombos++;
+    if (userBuckets.vpip) userPlayCombos++;
     if (ctx === 'rfi') {
       rfiTotal++;
-      if (gto === 'raise') gtoRfiRaises++;
-      if (user === 'raise') userRfiRaises++;
+      if (gtoBuckets.pfr) gtoRfiRaises++;
+      if (userBuckets.pfr) userRfiRaises++;
     }
   }
 

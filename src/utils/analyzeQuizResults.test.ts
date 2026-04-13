@@ -160,6 +160,24 @@ describe('computeMetrics', () => {
     expect(m.steal.compliance).toBeCloseTo(1 / 2);
   });
 
+  it('steal compliance: 15BB SB RFI allIn도 PFR로 카운트 (raise만 보지 않음)', () => {
+    const records = [
+      makeRecord({ stack: '15BB', chartName: 'SB RFI', correctAction: 'allIn', userAnswer: 'allIn' }),
+      makeRecord({ stack: '15BB', chartName: 'BTN RFI', correctAction: 'allIn', userAnswer: 'fold' }),
+    ];
+    const m = computeMetrics(records);
+    expect(m.steal.compliance).toBeCloseTo(1 / 2);
+  });
+
+  it('PFR compliance: 100BB SB RFI raise_bluff도 PFR로 카운트', () => {
+    const records = [
+      makeRecord({ stack: '100BB', chartName: 'SB RFI', correctAction: 'raise_bluff', userAnswer: 'raise_bluff' }),
+      makeRecord({ stack: '100BB', chartName: 'SB RFI', correctAction: 'raise_bluff', userAnswer: 'fold' }),
+    ];
+    const m = computeMetrics(records);
+    expect(m.pfr.compliance).toBeCloseTo(1 / 2);
+  });
+
   it('positionSense: 정답률이 포지션별 균일할수록 score↑', () => {
     const records = [
       makeRecord({ chartName: 'UTG RFI', heroPosition: 'UTG', correctAction: 'raise', userAnswer: 'raise' }),
