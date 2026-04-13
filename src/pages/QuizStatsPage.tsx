@@ -16,9 +16,11 @@ import { ErrorDonut } from '../components/ErrorDonut';
 import {
   analyzeQuizResults,
   type PlayerProfile,
-  type Priority,
   type ProfileLabel,
+  type WeaknessSummary,
+  type WeaknessAnalysis,
 } from '../utils/analyzeQuizResults';
+import { WEAKNESS_MAP, ALL_TAGS, type WeaknessId } from '../utils/weaknessMap';
 import type { AllData, QuizRecord } from '../types';
 import type { NavigateIntent } from '../App';
 
@@ -257,45 +259,176 @@ function HeaderCard({ profile }: { profile: PlayerProfile }) {
   );
 }
 
-function PrioritiesSection({
-  priorities,
-  onNavigate,
+function severityBadge(severity: number): { label: string; cls: string } {
+  if (severity >= 0.66) return { label: '상', cls: 'bg-red-900/60 text-red-300' };
+  if (severity >= 0.33) return { label: '중', cls: 'bg-yellow-900/60 text-yellow-300' };
+  return { label: '하', cls: 'bg-gray-800/60 text-gray-400' };
+}
+
+function WeaknessCard({
+  s, onNavigate,
 }: {
-  priorities: Priority[];
+  s: WeaknessSummary;
   onNavigate: (i: NavigateIntent) => void;
 }) {
+  const sev = severityBadge(s.severity);
+  return (
+    <div className="bg-gray-800/60 rounded-lg p-3 border border-gray-700">
+      <div className="flex items-start gap-2">
+        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-red-900/60 text-red-300 text-xs font-bold shrink-0">
+          {s.rank}
+        </span>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-white font-semibold text-sm">{s.meta.title}</span>
+            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${sev.cls}`}>{sev.label}</span>
+            <span className="text-gray-500 text-[10px]">{s.errorCount}/{s.spotCount}회</span>
+          </div>
+          <div className="text-gray-400 text-xs mt-0.5">{s.meta.description}</div>
+          <div className="flex flex-wrap gap-1 mt-1">
+            {s.meta.tag.map(t => (
+              <span key={t} className="text-[10px] text-gray-500">{t}</span>
+            ))}
+          </div>
+        </div>
+        <button
+          onClick={() => onNavigate({
+            kind: 'chart',
+            stack: s.meta.chartLink.stack,
+            chartName: s.meta.chartLink.chartName,
+            viewType: s.meta.chartLink.viewType,
+          })}
+          className="shrink-0 px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-medium"
+        >
+          차트 보기
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function WeaknessAllTable({
+  analysis, onNavigate, tagFilter,
+}: {
+  analysis: WeaknessAnalysis;
+  onNavigate: (i: NavigateIntent) => void;
+  tagFilter: string | null;
+}) {
+  const ids = Object.keys(WEAKNESS_MAP) as Exclude<WeaknessId, 'other'>[];
+  const rows = ids
+    .filter(id => !tagFilter || WEAKNESS_MAP[id].tag.includes(tagFilter))
+    .map(id => {
+      const b = analysis.byWeakness[id];
+      return {
+        id,
+        meta: WEAKNESS_MAP[id],
+        errorCount: b?.errorCount ?? 0,
+        spotCount: b?.spotCount ?? 0,
+        severity: b?.severity ?? 0,
+      };
+    })
+    .sort((a, b) => {
+      if (b.errorCount !== a.errorCount) return b.errorCount - a.errorCount;
+      return a.id.localeCompare(b.id);
+    });
+
+  return (
+    <div className="w-full text-xs">
+      <div className="grid grid-cols-[24px_1fr_auto_auto_auto] gap-2 px-2 py-1 text-gray-500 font-medium border-b border-gray-800">
+        <span>군</span><span>약점</span><span>오답</span><span>심각도</span><span></span>
+      </div>
+      {rows.map(r => {
+        const sev = severityBadge(r.severity);
+        return (
+          <div key={r.id} className="grid grid-cols-[24px_1fr_auto_auto_auto] gap-2 px-2 py-1.5 items-center border-b border-gray-800/50 hover:bg-gray-800/30">
+            <span className="text-gray-500">{r.meta.category}</span>
+            <span className="text-gray-300 truncate" title={r.meta.description}>{r.meta.title}</span>
+            <span className={r.errorCount > 0 ? 'text-red-400 font-medium' : 'text-gray-600'}>
+              {r.errorCount}/{r.spotCount}
+            </span>
+            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${sev.cls}`}>{sev.label}</span>
+            <button
+              onClick={() => onNavigate({
+                kind: 'chart',
+                stack: r.meta.chartLink.stack,
+                chartName: r.meta.chartLink.chartName,
+                viewType: r.meta.chartLink.viewType,
+              })}
+              className="px-2 py-0.5 bg-gray-700 hover:bg-indigo-600 text-gray-200 rounded text-[10px]"
+            >
+              차트
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function WeaknessSection({
+  analysis, onNavigate,
+}: {
+  analysis: WeaknessAnalysis;
+  onNavigate: (i: NavigateIntent) => void;
+}) {
+  const [showAll, setShowAll] = useState(false);
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
+
   return (
     <div className="w-full">
-      <h3 className="text-sm font-medium text-gray-400 mb-2">약점 TOP {priorities.length}</h3>
-      <div className="space-y-2">
-        {priorities.map(p => (
-          <div key={p.bucket} className="bg-gray-800/60 rounded-lg p-3 border border-gray-700">
-            <div className="flex items-start gap-2">
-              <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-red-900/60 text-red-300 text-xs font-bold">
-                {p.rank}
-              </span>
-              <div className="flex-1 min-w-0">
-                <div className="text-white font-semibold text-sm">{p.title}</div>
-                <div className="text-gray-400 text-xs mt-0.5">{p.description}</div>
-                <div className="text-gray-600 text-[10px] mt-1">
-                  추천 차트: {p.chartLink.stack} · {p.chartLink.chartName}
-                </div>
-              </div>
-              <button
-                onClick={() => onNavigate({
-                  kind: 'chart',
-                  stack: p.chartLink.stack,
-                  chartName: p.chartLink.chartName,
-                  type: p.chartLink.type,
-                })}
-                className="shrink-0 px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-medium"
-              >
-                차트 보기
-              </button>
-            </div>
-          </div>
-        ))}
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-sm font-medium text-gray-400">
+          약점 TOP {analysis.top3.length}
+          {analysis.stackInconsistencies.length > 0 && (
+            <span className="ml-2 text-[10px] text-yellow-500">
+              ⚠ 스택 조정 실패 {analysis.stackInconsistencies.length}건
+            </span>
+          )}
+        </h3>
+        <button
+          onClick={() => setShowAll(v => !v)}
+          className="text-xs px-2 py-1 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded"
+        >
+          {showAll ? '간단히' : '모든 약점 보기'}
+        </button>
       </div>
+
+      {analysis.top3.length === 0 && !showAll && (
+        <div className="text-center text-xs text-gray-500 py-3 bg-gray-800/30 rounded">
+          현저한 약점 없음 (각 카테고리 오답 2건 미만)
+        </div>
+      )}
+
+      {!showAll && analysis.top3.length > 0 && (
+        <div className="space-y-2">
+          {analysis.top3.map(s => (
+            <WeaknessCard key={s.weaknessId} s={s} onNavigate={onNavigate} />
+          ))}
+        </div>
+      )}
+
+      {showAll && (
+        <>
+          <div className="flex flex-wrap gap-1 mb-2">
+            <button
+              onClick={() => setTagFilter(null)}
+              className={`text-[10px] px-2 py-0.5 rounded ${tagFilter === null ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+            >
+              전체
+            </button>
+            {ALL_TAGS.map(t => (
+              <button
+                key={t}
+                onClick={() => setTagFilter(t)}
+                className={`text-[10px] px-2 py-0.5 rounded ${tagFilter === t ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+          <WeaknessAllTable analysis={analysis} onNavigate={onNavigate} tagFilter={tagFilter} />
+        </>
+      )}
     </div>
   );
 }
@@ -503,9 +636,7 @@ export function QuizStatsPage({ data, onNavigate }: QuizStatsPageProps) {
         </div>
       </div>
 
-      {profile.priorities.length > 0 && (
-        <PrioritiesSection priorities={profile.priorities} onNavigate={onNavigate} />
-      )}
+      <WeaknessSection analysis={profile.weaknessAnalysis} onNavigate={onNavigate} />
 
 
 <div className="w-full">

@@ -13,7 +13,7 @@ import type { StackSize, QuizQuestion } from './types';
 type View = 'open-range' | 'sb-open' | 'facing' | 'quiz' | 'quiz-stats';
 
 export type NavigateIntent =
-  | { kind: 'chart'; stack: StackSize; chartName: string; type: 'rfi' | 'facing' }
+  | { kind: 'chart'; stack: StackSize; chartName: string; viewType: 'open-range' | 'sb-open' | 'facing' }
   | { kind: 'review'; question: QuizQuestion }
   | { kind: 'quiz' };
 
@@ -44,10 +44,15 @@ function App() {
       sessionStorage.setItem('pendingChart', JSON.stringify({
         stack: intent.stack,
         chartName: intent.chartName,
-        type: intent.type,
+        viewType: intent.viewType,
       }));
+      // SbOpen은 25/40BB 비활성 — 그 경우 일반 open-range로 폴백
+      const targetView: View =
+        intent.viewType === 'sb-open' && SB_OPEN_DISABLED_STACKS.includes(intent.stack)
+          ? 'open-range'
+          : intent.viewType;
       setStack(intent.stack);
-      setView(intent.type === 'rfi' ? 'open-range' : 'facing');
+      setView(targetView);
     } else if (intent.kind === 'review') {
       sessionStorage.setItem('pendingReview', JSON.stringify(intent.question));
       setView('quiz');

@@ -1,5 +1,8 @@
 import type { QuizRecord, QuizQuestion, StackSize } from '../types';
 import { getChartContext, classifyAction } from './stats';
+import { WEAKNESS_MAP, type WeaknessId, type WeaknessMeta, type WeaknessCategory } from './weaknessMap';
+
+export type { WeaknessId, WeaknessMeta, WeaknessCategory };
 
 export type ErrorBucket =
   | 'tooTight_BB'
@@ -38,6 +41,29 @@ export interface PlayerProfile {
   metrics: Metrics;
   errorBuckets: ErrorBuckets;
   priorities: Priority[];
+  weaknessAnalysis: WeaknessAnalysis;
+}
+
+export interface WeaknessSummary {
+  rank: number;
+  weaknessId: Exclude<WeaknessId, 'other'>;
+  errorCount: number;
+  spotCount: number;
+  severity: number; // 0-1
+  meta: WeaknessMeta;
+}
+
+export interface WeaknessBucket {
+  errorCount: number;
+  spotCount: number;
+  severity: number;
+  errors: QuizRecord[];
+}
+
+export interface WeaknessAnalysis {
+  byWeakness: Partial<Record<WeaknessId, WeaknessBucket>>;
+  top3: WeaknessSummary[];
+  stackInconsistencies: QuizRecord[];
 }
 
 const STEAL_RFI_CHARTS = new Set(['CO RFI', 'BTN RFI', 'SB RFI', 'SB RFI BvB']);
@@ -308,6 +334,7 @@ export function analyzeQuizResults(records: QuizRecord[]): PlayerProfile {
       metrics: computeMetrics([]),
       errorBuckets: bucketErrors([]),
       priorities: [],
+      weaknessAnalysis: { byWeakness: {}, top3: [], stackInconsistencies: [] },
     };
   }
 
@@ -319,6 +346,7 @@ export function analyzeQuizResults(records: QuizRecord[]): PlayerProfile {
   const tooLooseRate = errorBuckets.tooLoose.length / total;
   const profileLabel = classifyProfile(metrics, tooLooseRate);
   const priorities = buildPriorities(errorBuckets);
+  const weaknessAnalysis = analyzeWeaknesses(records);
 
   return {
     accuracy,
@@ -327,5 +355,182 @@ export function analyzeQuizResults(records: QuizRecord[]): PlayerProfile {
     metrics,
     errorBuckets,
     priorities,
+    weaknessAnalysis,
   };
+}
+
+// ============================================================
+// 24-category weakness classification
+// ============================================================
+
+const FOURTYBB_BVB_ACTIONS = new Set(['raise_call', 'raise_fold', 'raise4bet', 'limp_call', 'limp_raise', 'limp_fold']);
+const PREMIUM_HANDS = new Set(['AA', 'KK', 'QQ']);
+const EP_HEROES = new Set(['UTG', 'UTG+1']);
+const MP_HEROES = new Set(['UTG+2', 'LJ', 'HJ', 'UTG1/2', 'LJ/HJ']);
+const LP_HEROES = new Set(['CO', 'BTN']);
+const VILLAIN_EP = new Set(['UTG', 'UTG+1', 'UTG1/2']);
+const VILLAIN_LP = new Set(['CO', 'BTN']);
+
+export function classifyWeakness(q: QuizQuestion, userAnswer: string): WeaknessId {
+  const { stackSize: stack, heroPosition: hero, villainPosition: vil, correctAction: correct, hand, chartName } = q;
+  if (userAnswer === correct) return 'other';
+
+  const isRFI = !vil;
+
+  // [C] 블러프/공격 (특수 액션 우선)
+  if (correct === 'threebet_bluff' && userAnswer === 'fold') return 'C13_블러프3bet_부재';
+  if (correct === 'raise_bluff' && userAnswer === 'fold') return 'C14_블러프RFI_부재';
+  if (correct === 'threebet_value' && userAnswer !== 'threebet_value') return 'C15_밸류3bet_누락';
+  if (PREMIUM_HANDS.has(hand) && correct === 'call' && userAnswer.startsWith('threebet')) return 'C17_트랩_실패';
+  if (correct.startsWith('fourbet') && userAnswer !== correct) return 'C18_4bet_오판';
+
+  // [D] 스택 특수 (구체적인 것 먼저 → 광범위 BvB는 마지막)
+  if (stack === '40BB' && FOURTYBB_BVB_ACTIONS.has(correct) && userAnswer !== correct) return 'D21_40BB_3bet후대응';
+  if (stack === '100BB' && hero === 'SB' && correct === 'limp' && userAnswer !== 'limp') return 'D23_SB_림프';
+  if (correct === 'allIn' && userAnswer !== 'allIn') {
+    if (stack === '15BB') return 'D19_15BB_올인기준';
+    if (stack === '25BB') return 'D20_25BB_올인';
+  }
+  if (stack === '100BB' && correct === 'call' && userAnswer !== 'call' && isRFI) return 'D22_100BB_플랫';
+  // 광범위 BvB 캐치올 (D21/D23 보다 뒤)
+  if (['SB RFI BvB', 'BB vs SB'].some(n => chartName.includes(n))) return 'D24_BvB_혼동';
+
+  // [B] Facing RFI
+  if (vil) {
+    if (userAnswer === 'fold' && correct === 'call') {
+      if (hero === 'BB' && stack === '15BB') return 'B7_BB디펜스_15BB';
+      if (hero === 'BB') return 'B8_BB디펜스_25_40BB';
+      if (hero === 'SB') return 'B9_SB_혼동';
+      if (LP_HEROES.has(hero)) return 'B10_IP플랫_부재';
+    }
+    if (userAnswer.startsWith('threebet') && correct === 'call') {
+      if (VILLAIN_EP.has(vil)) return 'B11_vsEP_오버3bet';
+      if (VILLAIN_LP.has(vil)) return 'B12_vsLP_오버3bet';
+    }
+    if (hero === 'SB') return 'B9_SB_혼동';
+  }
+
+  // [A] RFI
+  if (isRFI) {
+    if (userAnswer === 'fold' && correct === 'raise') {
+      if (EP_HEROES.has(hero)) return 'A1_EP_타이트';
+      if (MP_HEROES.has(hero)) return 'A2_MP_타이트';
+      if (LP_HEROES.has(hero)) return 'A3_LP_타이트';
+      if (hero === 'SB') return 'A4_SB_보수적';
+    }
+    if (userAnswer !== 'fold' && correct === 'fold') return 'A5_오픈_루즈';
+  }
+
+  return 'other';
+}
+
+export function isWeaknessSpot(q: QuizQuestion, weaknessId: WeaknessId): boolean {
+  const { stackSize: stack, heroPosition: hero, villainPosition: vil, correctAction: correct, hand, chartName } = q;
+  const isRFI = !vil;
+
+  switch (weaknessId) {
+    case 'A1_EP_타이트': return isRFI && EP_HEROES.has(hero) && correct === 'raise';
+    case 'A2_MP_타이트': return isRFI && MP_HEROES.has(hero) && correct === 'raise';
+    case 'A3_LP_타이트': return isRFI && LP_HEROES.has(hero) && correct === 'raise';
+    case 'A4_SB_보수적': return isRFI && hero === 'SB' && correct === 'raise';
+    case 'A5_오픈_루즈': return isRFI && correct === 'fold';
+    case 'A6_스택조정_실패': return false; // 별도 집계
+    case 'B7_BB디펜스_15BB': return !!vil && hero === 'BB' && stack === '15BB' && correct === 'call';
+    case 'B8_BB디펜스_25_40BB': return !!vil && hero === 'BB' && (stack === '25BB' || stack === '40BB') && correct === 'call';
+    case 'B9_SB_혼동': return !!vil && hero === 'SB';
+    case 'B10_IP플랫_부재': return !!vil && LP_HEROES.has(hero) && correct === 'call';
+    case 'B11_vsEP_오버3bet': return !!vil && VILLAIN_EP.has(vil) && correct === 'call';
+    case 'B12_vsLP_오버3bet': return !!vil && VILLAIN_LP.has(vil) && correct === 'call';
+    case 'C13_블러프3bet_부재': return correct === 'threebet_bluff';
+    case 'C14_블러프RFI_부재': return correct === 'raise_bluff';
+    case 'C15_밸류3bet_누락': return correct === 'threebet_value';
+    case 'C16_스퀴즈_부재': return false;
+    case 'C17_트랩_실패': return PREMIUM_HANDS.has(hand) && correct === 'call';
+    case 'C18_4bet_오판': return correct.startsWith('fourbet');
+    case 'D19_15BB_올인기준': return stack === '15BB' && correct === 'allIn';
+    case 'D20_25BB_올인': return stack === '25BB' && correct === 'allIn';
+    case 'D21_40BB_3bet후대응': return stack === '40BB' && FOURTYBB_BVB_ACTIONS.has(correct);
+    case 'D22_100BB_플랫': return stack === '100BB' && isRFI && correct === 'call';
+    case 'D23_SB_림프': return stack === '100BB' && hero === 'SB' && correct === 'limp';
+    case 'D24_BvB_혼동': return ['SB RFI BvB', 'BB vs SB'].some(n => chartName.includes(n));
+    case 'other': return false;
+  }
+}
+
+export function detectStackInconsistency(records: QuizRecord[]): QuizRecord[] {
+  const groups = new Map<string, QuizRecord[]>();
+  for (const r of records) {
+    if (!r.question.heroPosition) continue;
+    const key = `${r.question.heroPosition}|${r.question.hand}`;
+    const list = groups.get(key) ?? [];
+    list.push(r);
+    groups.set(key, list);
+  }
+  const flagged: QuizRecord[] = [];
+  for (const list of groups.values()) {
+    const stacks = new Set(list.map(r => r.question.stackSize));
+    if (stacks.size < 2) continue;
+    const correctCount = list.filter(r => r.correct).length;
+    if (correctCount > 0 && correctCount < list.length) {
+      flagged.push(...list);
+    }
+  }
+  return flagged;
+}
+
+const CAT_ORDER: Record<WeaknessCategory, number> = { B: 0, A: 1, C: 2, D: 3 };
+
+export function analyzeWeaknesses(records: QuizRecord[]): WeaknessAnalysis {
+  const ids = Object.keys(WEAKNESS_MAP) as Exclude<WeaknessId, 'other'>[];
+  const errorBucket = new Map<WeaknessId, QuizRecord[]>();
+  const spotCounts = new Map<WeaknessId, number>();
+
+  for (const r of records) {
+    if (!r.correct) {
+      const id = classifyWeakness(r.question, r.userAnswer);
+      const list = errorBucket.get(id) ?? [];
+      list.push(r);
+      errorBucket.set(id, list);
+    }
+    for (const id of ids) {
+      if (isWeaknessSpot(r.question, id)) {
+        spotCounts.set(id, (spotCounts.get(id) ?? 0) + 1);
+      }
+    }
+  }
+
+  // A6 stack inconsistency: separate aggregate
+  const stackInconsistencies = detectStackInconsistency(records);
+  if (stackInconsistencies.length > 0) {
+    errorBucket.set('A6_스택조정_실패', stackInconsistencies);
+    spotCounts.set('A6_스택조정_실패', stackInconsistencies.length);
+  }
+
+  const byWeakness: Partial<Record<WeaknessId, WeaknessBucket>> = {};
+  for (const id of ids) {
+    const errors = errorBucket.get(id) ?? [];
+    const spotCount = spotCounts.get(id) ?? 0;
+    const severity = spotCount === 0 ? 0 : errors.length / spotCount;
+    byWeakness[id] = { errorCount: errors.length, spotCount, severity, errors };
+  }
+
+  const top3: WeaknessSummary[] = ids
+    .filter(id => (byWeakness[id]?.errorCount ?? 0) >= 2)
+    .sort((a, b) => {
+      const ea = byWeakness[a]!.errorCount;
+      const eb = byWeakness[b]!.errorCount;
+      if (ea !== eb) return eb - ea;
+      return CAT_ORDER[WEAKNESS_MAP[a].category] - CAT_ORDER[WEAKNESS_MAP[b].category];
+    })
+    .slice(0, 3)
+    .map((id, idx) => ({
+      rank: idx + 1,
+      weaknessId: id,
+      errorCount: byWeakness[id]!.errorCount,
+      spotCount: byWeakness[id]!.spotCount,
+      severity: byWeakness[id]!.severity,
+      meta: WEAKNESS_MAP[id],
+    }));
+
+  return { byWeakness, top3, stackInconsistencies };
 }
