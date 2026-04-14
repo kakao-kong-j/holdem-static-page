@@ -8,7 +8,7 @@ const STORAGE_KEY = 'holdem_quiz_records';
 export type QuizChartType = 'open-range' | 'facing';
 export type QuizChartFilter = QuizChartType | 'both';
 
-interface ChartScenario {
+export interface ChartScenario {
   chartName: string;
   heroPosition: string;
   villainPosition: string;
@@ -16,7 +16,7 @@ interface ChartScenario {
   chartType: QuizChartType;
 }
 
-function parseChartScenario(chartName: string): ChartScenario | null {
+export function parseChartScenario(chartName: string): ChartScenario | null {
   // 내 오픈 후 대응 — 제외
   if (chartName.includes('Allin')) return null;
   if (chartName.match(/ vs .+ 3bet$/)) return null;

@@ -8,9 +8,10 @@ import { SbOpenPage } from './pages/SbOpenPage';
 import { FacingPage } from './pages/FacingPage';
 import { QuizPage } from './pages/QuizPage';
 import { QuizStatsPage } from './pages/QuizStatsPage';
+import { ChartQuizPage } from './pages/ChartQuizPage';
 import type { StackSize, QuizQuestion } from './types';
 
-type View = 'open-range' | 'sb-open' | 'facing' | 'quiz' | 'quiz-stats';
+type View = 'open-range' | 'sb-open' | 'facing' | 'quiz' | 'chart-quiz' | 'quiz-stats';
 
 export type NavigateIntent =
   | { kind: 'chart'; stack: StackSize; chartName: string; viewType: 'open-range' | 'sb-open' | 'facing' }
@@ -22,6 +23,7 @@ const VIEWS: { value: View; label: string }[] = [
   { value: 'sb-open', label: 'SB Open' },
   { value: 'facing', label: 'Facing Charts' },
   { value: 'quiz', label: '퀴즈' },
+  { value: 'chart-quiz', label: '차트 퀴즈' },
   { value: 'quiz-stats', label: '통계' },
 ];
 
@@ -104,7 +106,7 @@ function App() {
         ))}
       </div>
 
-      {view !== 'quiz' && view !== 'quiz-stats' && (
+      {view !== 'quiz' && view !== 'chart-quiz' && view !== 'quiz-stats' && (
         <div className="flex justify-center mb-4">
           <StackTabs
             selected={stack}
@@ -118,6 +120,7 @@ function App() {
       {view === 'sb-open' && <SbOpenPage stackData={stackData} />}
       {view === 'facing' && <FacingPage stackData={stackData} />}
       {view === 'quiz' && <QuizPage data={data} />}
+      {view === 'chart-quiz' && <ChartQuizPage data={data} />}
       {view === 'quiz-stats' && <QuizStatsPage data={data} onNavigate={navigate} />}
     </div>
   );
