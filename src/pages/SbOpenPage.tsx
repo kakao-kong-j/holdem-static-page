@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { RangeGrid } from '../components/RangeGrid';
 import { Legend } from '../components/Legend';
-import { ACTION_COLORS } from '../constants';
+import { ACTION_COLORS, SB_RFI_CHART } from '../constants';
 import { buildHandAction, buildActionStats } from '../utils/hand';
 import type { StackData } from '../types';
 
@@ -10,7 +10,7 @@ interface Props {
 }
 
 export function SbOpenPage({ stackData }: Props) {
-  const chartData = stackData['SB RFI'];
+  const chartData = stackData[SB_RFI_CHART];
 
   const handAction = useMemo(
     () => (chartData ? buildHandAction(chartData) : {}),

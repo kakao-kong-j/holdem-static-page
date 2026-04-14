@@ -1,18 +1,13 @@
 import { useMemo } from 'react';
 import { RangeGrid } from '../components/RangeGrid';
 import { Legend, type LegendItem } from '../components/Legend';
-import { OPEN_RANGE_POSITIONS, POSITION_COLORS } from '../constants';
+import { OPEN_RANGE_COLOR_MAP, OPEN_RANGE_POSITIONS, POSITION_COLORS } from '../constants';
 import { buildOpenRangeData, forEachHand } from '../utils/hand';
-import type { StackData, ColorDef } from '../types';
+import type { StackData } from '../types';
 
 interface Props {
   stackData: StackData;
 }
-
-const positionColorMap: Record<string, ColorDef> = Object.fromEntries([
-  ...OPEN_RANGE_POSITIONS.map(p => [p, { bg: POSITION_COLORS[p], text: '#fff', label: p }]),
-  ['fold', { bg: 'transparent', text: '#6b7280', label: '-' }],
-]);
 
 export function OpenRangePage({ stackData }: Props) {
   const handPosition = useMemo(() => buildOpenRangeData(stackData), [stackData]);
@@ -41,7 +36,7 @@ export function OpenRangePage({ stackData }: Props) {
   return (
     <div className="flex flex-col items-center">
       <div className="mb-4">
-        <RangeGrid handAction={handPosition} colorMap={positionColorMap} />
+        <RangeGrid handAction={handPosition} colorMap={OPEN_RANGE_COLOR_MAP} />
       </div>
 
       <Legend items={legendItems} total={1326} />

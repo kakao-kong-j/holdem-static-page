@@ -21,6 +21,7 @@ import {
   type WeaknessAnalysis,
 } from '../utils/analyzeQuizResults';
 import { WEAKNESS_MAP, ALL_TAGS, type WeaknessId } from '../utils/weaknessMap';
+import { QuizCompareSection } from '../components/QuizCompareSection';
 import type { AllData, QuizRecord } from '../types';
 import type { NavigateIntent } from '../App';
 
@@ -537,12 +538,13 @@ interface QuizStatsPageProps {
   onNavigate: (intent: NavigateIntent) => void;
 }
 
-type TabKey = 'profile' | 'accuracy' | 'wrongs';
+type TabKey = 'profile' | 'accuracy' | 'wrongs' | 'compare';
 
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'profile', label: '프로파일' },
   { key: 'accuracy', label: '정답률' },
   { key: 'wrongs', label: '오답 목록' },
+  { key: 'compare', label: '차트 비교' },
 ];
 
 export function QuizStatsPage({ data, onNavigate }: QuizStatsPageProps) {
@@ -646,23 +648,49 @@ export function QuizStatsPage({ data, onNavigate }: QuizStatsPageProps) {
   const pct = (correct: number, total: number) =>
     total === 0 ? '-' : `${Math.round((correct / total) * 100)}%`;
 
+  const tabBar = (
+    <div className="w-full flex gap-1 bg-gray-800/40 rounded-lg p-1">
+      {TABS.map(t => (
+        <button
+          key={t.key}
+          onClick={() => setTab(t.key)}
+          className={`flex-1 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+            tab === t.key
+              ? 'bg-indigo-600 text-white'
+              : 'text-gray-400 hover:text-gray-200 hover:bg-gray-700/50'
+          }`}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+
   if (!stats) {
     return (
-      <div className="flex flex-col items-center gap-4">
+      <div className="flex flex-col items-center gap-6 max-w-lg mx-auto">
         <h2 className="text-lg font-bold text-white">퀴즈 통계</h2>
-        <p className="text-gray-500">아직 푼 퀴즈가 없습니다. 먼저 퀴즈를 풀어보세요!</p>
-        <div className="flex gap-2">
-          <button
-            onClick={() => onNavigate({ kind: 'quiz' })}
-            className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-500"
-          >
-            퀴즈 시작
-          </button>
-          <label className="px-4 py-2 bg-gray-800 text-gray-300 rounded-lg text-sm cursor-pointer hover:bg-gray-700">
-            기록 가져오기
-            <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={handleImport} />
-          </label>
-        </div>
+        {tabBar}
+
+        {tab === 'compare' ? (
+          <QuizCompareSection data={data} records={records} />
+        ) : (
+          <div className="flex flex-col items-center gap-4 py-8">
+            <p className="text-gray-500">아직 푼 퀴즈가 없습니다. 먼저 퀴즈를 풀어보세요!</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => onNavigate({ kind: 'quiz' })}
+                className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-500"
+              >
+                퀴즈 시작
+              </button>
+              <label className="px-4 py-2 bg-gray-800 text-gray-300 rounded-lg text-sm cursor-pointer hover:bg-gray-700">
+                기록 가져오기
+                <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={handleImport} />
+              </label>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -673,21 +701,7 @@ export function QuizStatsPage({ data, onNavigate }: QuizStatsPageProps) {
 
       <HeaderCard profile={profile} />
 
-      <div className="w-full flex gap-1 bg-gray-800/40 rounded-lg p-1">
-        {TABS.map(t => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`flex-1 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-              tab === t.key
-                ? 'bg-indigo-600 text-white'
-                : 'text-gray-400 hover:text-gray-200 hover:bg-gray-700/50'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      {tabBar}
 
       {tab === 'profile' && (
         <>
@@ -819,6 +833,10 @@ export function QuizStatsPage({ data, onNavigate }: QuizStatsPageProps) {
           records={wrongRecords}
           onReview={r => onNavigate({ kind: 'review', question: r.question })}
         />
+      )}
+
+      {tab === 'compare' && (
+        <QuizCompareSection data={data} records={records} />
       )}
 
 <div className="flex gap-2 flex-wrap justify-center pt-2">
