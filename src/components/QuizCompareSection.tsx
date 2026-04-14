@@ -1,14 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { RangeGrid } from './RangeGrid';
-import { SB_RFI_CHART, STACK_SIZES } from '../constants';
+import { OPEN_RANGE_POSITIONS, SB_RFI_CHART, STACK_SIZES } from '../constants';
 import { buildHandAction, buildOpenRangeData } from '../utils/hand';
 import {
+  buildAnswerTitles,
   buildUserOpenRange,
   compareSummary,
   computeAnswerBorders,
+  computeRecordBorders,
+  recordSummary,
   COMPARE_ACTION_COLORMAP,
   COMPARE_OPEN_RANGE_COLORMAP,
   fillUnanswered,
+  latestRecordsByHand,
   latestUserAnswersByHand,
   maskMismatchesOnly,
 } from '../utils/compare';
@@ -123,9 +127,28 @@ export function QuizCompareSection({ data, records }: Props) {
     };
   }, [mode, stack, stackData, records, selectedChart]);
 
+  const rightRecords = useMemo(() => {
+    if (mode === 'open-range') {
+      const rfiCharts = new Set(OPEN_RANGE_POSITIONS.map(p => `${p} RFI`));
+      return latestRecordsByHand(
+        records,
+        r => r.question.stackSize === stack && rfiCharts.has(r.question.chartName),
+      );
+    }
+    const targetChart = mode === 'sb-open' ? SB_RFI_CHART : selectedChart;
+    if (!targetChart) return {};
+    return latestRecordsByHand(
+      records,
+      r => r.question.stackSize === stack && r.question.chartName === targetChart,
+    );
+  }, [mode, stack, records, selectedChart]);
+
   const summary = useMemo(
-    () => compareSummary(view.left, view.right),
-    [view.left, view.right],
+    () =>
+      mode === 'open-range'
+        ? recordSummary(rightRecords)
+        : compareSummary(view.left, view.right),
+    [mode, rightRecords, view.left, view.right],
   );
 
   const displayed = useMemo(
@@ -134,15 +157,22 @@ export function QuizCompareSection({ data, records }: Props) {
   );
 
   const rightBorders = useMemo(
-    () => computeAnswerBorders(displayed.left, displayed.right),
-    [displayed],
+    () =>
+      mode === 'open-range'
+        ? computeRecordBorders(rightRecords, displayed.right)
+        : computeAnswerBorders(displayed.left, displayed.right),
+    [mode, rightRecords, displayed],
   );
+
+  const rightTitles = useMemo(() => buildAnswerTitles(rightRecords), [rightRecords]);
 
   const [hoveredHand, setHoveredHand] = useState<string | null>(null);
 
   const handleRightHover = useCallback((hand: string | null) => {
     setHoveredHand(hand);
   }, []);
+
+  const hoveredRecord = hoveredHand ? rightRecords[hoveredHand] : undefined;
 
   const selectClass =
     'bg-gray-800 text-gray-200 rounded px-3 py-2 text-sm border border-gray-600 focus:border-blue-500 focus:outline-none';
@@ -251,6 +281,40 @@ export function QuizCompareSection({ data, records }: Props) {
         </button>
       </div>
 
+      <div className="min-h-[56px] px-3 py-2 rounded bg-gray-800/60 border border-gray-700 text-xs text-gray-300 w-full max-w-xl">
+        {hoveredRecord ? (
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-bold text-white text-sm">{hoveredRecord.question.hand}</span>
+              <span className="text-gray-400">·</span>
+              <span>{hoveredRecord.question.stackSize}</span>
+              <span className="text-gray-400">·</span>
+              <span className="text-gray-200">{hoveredRecord.question.chartName}</span>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-gray-400">나:</span>
+              <span className="font-semibold text-white">{hoveredRecord.question.heroPosition || '-'}</span>
+              {hoveredRecord.question.villainPosition && (
+                <>
+                  <span className="text-gray-400">vs 빌런:</span>
+                  <span className="font-semibold text-white">{hoveredRecord.question.villainPosition}</span>
+                </>
+              )}
+              <span className="text-gray-400">·</span>
+              <span className="text-gray-400">내 답변:</span>
+              <span className={`font-semibold ${hoveredRecord.correct ? 'text-emerald-400' : 'text-red-400'}`}>
+                {hoveredRecord.userAnswer}
+              </span>
+              <span className="text-gray-400">·</span>
+              <span className="text-gray-400">정답:</span>
+              <span className="font-semibold text-white">{hoveredRecord.question.correctAction}</span>
+            </div>
+          </div>
+        ) : (
+          <div className="text-gray-500 italic">내 답변 셀에 마우스를 올리면 퀴즈 정보가 표시됩니다</div>
+        )}
+      </div>
+
       {view.missing ? (
         <div className="text-gray-500 py-8 text-sm">
           해당 스팟의 차트 데이터가 없습니다
@@ -272,6 +336,7 @@ export function QuizCompareSection({ data, records }: Props) {
               colorMap={view.colorMap}
               borderColor={rightBorders}
               onHoverHand={handleRightHover}
+              handTitles={rightTitles}
             />
           </div>
         </div>

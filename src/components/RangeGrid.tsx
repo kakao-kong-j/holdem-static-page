@@ -9,12 +9,13 @@ interface Props {
   borderColor?: Record<string, string>;
   highlightedHand?: string | null;
   onHoverHand?: (hand: string | null) => void;
+  handTitles?: Record<string, string>;
 }
 
 const FOLD_COLOR: ColorDef = { bg: 'transparent', text: '#6b7280', label: '-' };
 const cellSize = { width: 'clamp(28px, 5.5vw, 52px)', height: 'clamp(28px, 5.5vw, 52px)' };
 
-export const RangeGrid = memo(function RangeGrid({ handAction, colorMap, borderColor, highlightedHand, onHoverHand }: Props) {
+export const RangeGrid = memo(function RangeGrid({ handAction, colorMap, borderColor, highlightedHand, onHoverHand, handTitles }: Props) {
   return (
     <div className="inline-grid gap-[2px]" style={{ gridTemplateColumns: 'repeat(13, 1fr)' }}>
       {RANKS.map((_, ri) =>
@@ -46,7 +47,7 @@ export const RangeGrid = memo(function RangeGrid({ handAction, colorMap, borderC
                 transform: isHighlighted ? 'scale(1.35)' : undefined,
                 zIndex: isHighlighted ? 20 : undefined,
               }}
-              title={`${hand} (${combos} combos) - ${action}`}
+              title={handTitles?.[hand] ?? `${hand} (${combos} combos) - ${action}`}
               onMouseEnter={onHoverHand ? () => onHoverHand(hand) : undefined}
               onMouseLeave={onHoverHand ? () => onHoverHand(null) : undefined}
             >
