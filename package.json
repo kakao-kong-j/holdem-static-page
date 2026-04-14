@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "decrypt": "openssl enc -aes-256-cbc -d -salt -pbkdf2 -in public/gto-preflop-charts-all.json.enc -out public/gto-preflop-charts-all.json -pass pass:$DATA_KEY",
+    "build:vercel": "npm run decrypt && npm run build",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
