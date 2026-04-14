@@ -39,3 +39,10 @@ export const POSITION_COLORS: Record<string, string> = {
   'SB':    '#6B4DB8',
 };
 
+export const OPEN_RANGE_COLOR_MAP: Record<string, ColorDef> = Object.fromEntries([
+  ...OPEN_RANGE_POSITIONS.map(p => [p, { bg: POSITION_COLORS[p], text: '#fff', label: p }]),
+  ['fold', { bg: 'transparent', text: '#6b7280', label: '-' }],
+]);
+
+export const SB_RFI_CHART = 'SB RFI';
+
