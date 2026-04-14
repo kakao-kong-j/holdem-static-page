@@ -63,6 +63,13 @@ Full validation data in `prompt.md` section 7.
 
 ## Deployment
 
-- GitHub Actions workflow: `.github/workflows/deploy.yml`
-- Vite `base: '/holdem-static-page/'`
-- Push to `main` triggers auto-deploy to GitHub Pages
+**GitHub Pages** (primary):
+- Workflow: `.github/workflows/deploy.yml`
+- Vite `base: '/holdem-static-page/'` (subpath)
+- Push to `main` triggers auto-deploy
+
+**Vercel** (secondary):
+- Config: `vercel.json` (framework=vite, buildCommand=`npm run build:vercel`)
+- Root-domain serve → Vite `base` falls back to `/` when `VERCEL=1` is set
+- Required env vars in Vercel dashboard: `DATA_KEY` (for `openssl` decrypt), `VITE_PASSWORD_HASH`
+- Same source data (`public/gto-preflop-charts-all.json.enc`) decrypted at build
