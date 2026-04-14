@@ -441,6 +441,8 @@ function WeaknessSection({
   );
 }
 
+const PAGE_SIZE = 20;
+
 function ErrorTable({
   records,
   onReview,
@@ -448,13 +450,19 @@ function ErrorTable({
   records: QuizRecord[];
   onReview: (r: QuizRecord) => void;
 }) {
+  const [page, setPage] = useState(0);
+  const totalPages = Math.max(1, Math.ceil(records.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages - 1);
+  const start = currentPage * PAGE_SIZE;
+  const pageRecords = records.slice(start, start + PAGE_SIZE);
+
   if (records.length === 0) return null;
   return (
     <div className="w-full">
       <h3 className="text-sm font-medium text-gray-400 mb-2">오답 목록 ({records.length}건)</h3>
       <div className="space-y-1">
-        {records.slice(0, 50).map((r, i) => (
-          <div key={i} className="bg-gray-800/50 rounded px-2 py-1.5 flex items-center gap-2 text-xs">
+        {pageRecords.map((r, i) => (
+          <div key={start + i} className="bg-gray-800/50 rounded px-2 py-1.5 flex items-center gap-2 text-xs">
             <span className="text-gray-500 font-mono w-12 shrink-0">{r.question.stackSize}</span>
             <span className="text-white font-bold w-10 shrink-0">{r.question.hand}</span>
             <span className="text-gray-400 flex-1 truncate">{r.question.situation || r.question.chartName}</span>
@@ -485,12 +493,28 @@ function ErrorTable({
             </button>
           </div>
         ))}
-        {records.length > 50 && (
-          <div className="text-center text-xs text-gray-500 mt-2">
-            최신 50건만 표시 (총 {records.length}건)
-          </div>
-        )}
       </div>
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2 mt-3">
+          <button
+            onClick={() => setPage(p => Math.max(0, p - 1))}
+            disabled={currentPage === 0}
+            className="px-3 py-1 bg-gray-800 text-gray-300 rounded text-xs hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            이전
+          </button>
+          <span className="text-xs text-gray-400">
+            {currentPage + 1} / {totalPages}
+          </span>
+          <button
+            onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+            disabled={currentPage >= totalPages - 1}
+            className="px-3 py-1 bg-gray-800 text-gray-300 rounded text-xs hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            다음
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -513,9 +537,18 @@ interface QuizStatsPageProps {
   onNavigate: (intent: NavigateIntent) => void;
 }
 
+type TabKey = 'profile' | 'accuracy' | 'wrongs';
+
+const TABS: { key: TabKey; label: string }[] = [
+  { key: 'profile', label: '프로파일' },
+  { key: 'accuracy', label: '정답률' },
+  { key: 'wrongs', label: '오답 목록' },
+];
+
 export function QuizStatsPage({ data, onNavigate }: QuizStatsPageProps) {
   const [records, setRecords] = useState<QuizRecord[]>(() => loadQuizRecords());
   const [filter, setFilter] = useState<Filter>(null);
+  const [tab, setTab] = useState<TabKey>('profile');
   const fileRef = useRef<HTMLInputElement>(null);
 
   const deviation = useMemo(() => computeDeviationStats(records), [records]);
@@ -572,14 +605,18 @@ export function QuizStatsPage({ data, onNavigate }: QuizStatsPageProps) {
     return { totalCorrect, posBuckets, stackBuckets, topMisses, confusion };
   }, [records]);
 
+  const wrongRecords = useMemo(
+    () => records.filter(r => !r.correct),
+    [records],
+  );
+
   const filteredWrong = useMemo(() => {
     if (!filter) return [];
-    return records.filter(r => {
-      if (r.correct) return false;
+    return wrongRecords.filter(r => {
       if (filter.type === 'stack') return r.question.stackSize === filter.value;
       return r.question.heroPosition === filter.value;
     });
-  }, [records, filter]);
+  }, [wrongRecords, filter]);
 
   const toggleFilter = (type: 'stack' | 'position', value: string) => {
     setFilter(prev =>
@@ -636,128 +673,153 @@ export function QuizStatsPage({ data, onNavigate }: QuizStatsPageProps) {
 
       <HeaderCard profile={profile} />
 
-      <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-4">
-        <PlayStyleSection d={deviation} />
-        <div className="bg-gray-800/30 rounded-lg p-3 flex flex-col items-center">
-          <h3 className="text-sm font-medium text-gray-400 mb-2 self-start">에러 분포</h3>
-          <ErrorDonut buckets={profile.errorBuckets} />
-        </div>
+      <div className="w-full flex gap-1 bg-gray-800/40 rounded-lg p-1">
+        {TABS.map(t => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`flex-1 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+              tab === t.key
+                ? 'bg-indigo-600 text-white'
+                : 'text-gray-400 hover:text-gray-200 hover:bg-gray-700/50'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
       </div>
 
-      <WeaknessSection analysis={profile.weaknessAnalysis} onNavigate={onNavigate} />
+      {tab === 'profile' && (
+        <>
+          <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-4">
+            <PlayStyleSection d={deviation} />
+            <div className="bg-gray-800/30 rounded-lg p-3 flex flex-col items-center">
+              <h3 className="text-sm font-medium text-gray-400 mb-2 self-start">에러 분포</h3>
+              <ErrorDonut buckets={profile.errorBuckets} />
+            </div>
+          </div>
 
+          <WeaknessSection analysis={profile.weaknessAnalysis} onNavigate={onNavigate} />
+        </>
+      )}
 
-<div className="w-full">
-        <h3 className="text-sm font-medium text-gray-400 mb-2">스택별 정답률</h3>
-        <div className="grid grid-cols-2 gap-2">
-          {Object.entries(stats.stackBuckets).map(([stack, b]) => (
-            <button
-              key={stack}
-              onClick={() => toggleFilter('stack', stack)}
-              className={`rounded p-3 flex justify-between text-left transition-colors ${
-                filter?.type === 'stack' && filter.value === stack
-                  ? 'bg-indigo-900/50 ring-1 ring-indigo-500'
-                  : 'bg-gray-800/50 hover:bg-gray-700/50'
-              }`}
-            >
-              <span className="text-gray-300 font-mono text-sm">{stack}</span>
-              <span className="text-white font-medium text-sm">
-                {pct(b.correct, b.total)}{' '}
-                <span className="text-gray-500 text-xs">({b.total})</span>
-              </span>
-            </button>
-          ))}
-        </div>
-        {filter?.type === 'stack' && <WrongList key={filter.value} records={filteredWrong} data={data} />}
-      </div>
-
-<div className="w-full">
-        <h3 className="text-sm font-medium text-gray-400 mb-2">포지션별 정답률</h3>
-        <div className="grid grid-cols-2 gap-2">
-          {Object.entries(stats.posBuckets).map(([pos, b]) => (
-            <button
-              key={pos}
-              onClick={() => toggleFilter('position', pos)}
-              className={`rounded p-3 flex justify-between text-left transition-colors ${
-                filter?.type === 'position' && filter.value === pos
-                  ? 'bg-indigo-900/50 ring-1 ring-indigo-500'
-                  : 'bg-gray-800/50 hover:bg-gray-700/50'
-              }`}
-            >
-              <span className="text-gray-300 text-sm">{pos}</span>
-              <span className="text-white font-medium text-sm">
-                {pct(b.correct, b.total)}{' '}
-                <span className="text-gray-500 text-xs">({b.total})</span>
-              </span>
-            </button>
-          ))}
-        </div>
-        {filter?.type === 'position' && <WrongList key={filter.value} records={filteredWrong} data={data} />}
-      </div>
-
-{stats.topMisses.length > 0 && (
-        <div className="w-full">
-          <h3 className="text-sm font-medium text-gray-400 mb-2">자주 틀리는 핸드 TOP 10</h3>
-          <div className="space-y-1.5">
-            {stats.topMisses.map((m, i) => (
-              <div key={i} className="bg-gray-800/50 rounded p-3 flex items-center gap-3">
-                <span className="text-gray-500 text-xs w-5">{i + 1}</span>
-                <span className="text-white font-bold text-sm w-10">{m.hand}</span>
-                <span className="text-gray-400 text-xs flex-1 truncate">{m.situation}</span>
-                <span
-                  className="px-2 py-0.5 rounded text-xs font-medium"
-                  style={{
-                    backgroundColor: ACTION_COLORS[m.correctAction]?.bg || '#374151',
-                    color: ACTION_COLORS[m.correctAction]?.text || '#d1d5db',
-                  }}
+      {tab === 'accuracy' && (
+        <>
+          <div className="w-full">
+            <h3 className="text-sm font-medium text-gray-400 mb-2">스택별 정답률</h3>
+            <div className="grid grid-cols-2 gap-2">
+              {Object.entries(stats.stackBuckets).map(([stack, b]) => (
+                <button
+                  key={stack}
+                  onClick={() => toggleFilter('stack', stack)}
+                  className={`rounded p-3 flex justify-between text-left transition-colors ${
+                    filter?.type === 'stack' && filter.value === stack
+                      ? 'bg-indigo-900/50 ring-1 ring-indigo-500'
+                      : 'bg-gray-800/50 hover:bg-gray-700/50'
+                  }`}
                 >
-                  {actionLabel(m.correctAction)}
-                </span>
-                <span className="text-red-400 text-xs">{m.count}회</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-{Object.keys(stats.confusion).length > 0 && (
-        <div className="w-full">
-          <h3 className="text-sm font-medium text-gray-400 mb-2">액션별 혼동 분석</h3>
-          <div className="space-y-1.5">
-            {Object.entries(stats.confusion).map(([correct, wrongMap]) => (
-              <div key={correct} className="bg-gray-800/50 rounded p-3">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-gray-500 text-xs">정답:</span>
-                  <span
-                    className="px-2 py-0.5 rounded text-xs font-medium"
-                    style={{
-                      backgroundColor: ACTION_COLORS[correct]?.bg || '#374151',
-                      color: ACTION_COLORS[correct]?.text || '#d1d5db',
-                    }}
-                  >
-                    {actionLabel(correct)}
+                  <span className="text-gray-300 font-mono text-sm">{stack}</span>
+                  <span className="text-white font-medium text-sm">
+                    {pct(b.correct, b.total)}{' '}
+                    <span className="text-gray-500 text-xs">({b.total})</span>
                   </span>
-                </div>
-                <div className="flex flex-wrap gap-2 ml-4">
-                  {Object.entries(wrongMap)
-                    .sort((a, b) => b[1] - a[1])
-                    .map(([wrong, count]) => (
-                      <span key={wrong} className="text-xs text-gray-400">
-                        → {actionLabel(wrong)}{' '}
-                        <span className="text-red-400">{count}회</span>
-                      </span>
-                    ))}
-                </div>
-              </div>
-            ))}
+                </button>
+              ))}
+            </div>
+            {filter?.type === 'stack' && <WrongList key={filter.value} records={filteredWrong} data={data} />}
           </div>
-        </div>
+
+          <div className="w-full">
+            <h3 className="text-sm font-medium text-gray-400 mb-2">포지션별 정답률</h3>
+            <div className="grid grid-cols-2 gap-2">
+              {Object.entries(stats.posBuckets).map(([pos, b]) => (
+                <button
+                  key={pos}
+                  onClick={() => toggleFilter('position', pos)}
+                  className={`rounded p-3 flex justify-between text-left transition-colors ${
+                    filter?.type === 'position' && filter.value === pos
+                      ? 'bg-indigo-900/50 ring-1 ring-indigo-500'
+                      : 'bg-gray-800/50 hover:bg-gray-700/50'
+                  }`}
+                >
+                  <span className="text-gray-300 text-sm">{pos}</span>
+                  <span className="text-white font-medium text-sm">
+                    {pct(b.correct, b.total)}{' '}
+                    <span className="text-gray-500 text-xs">({b.total})</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+            {filter?.type === 'position' && <WrongList key={filter.value} records={filteredWrong} data={data} />}
+          </div>
+
+          {stats.topMisses.length > 0 && (
+            <div className="w-full">
+              <h3 className="text-sm font-medium text-gray-400 mb-2">자주 틀리는 핸드 TOP 10</h3>
+              <div className="space-y-1.5">
+                {stats.topMisses.map((m, i) => (
+                  <div key={i} className="bg-gray-800/50 rounded p-3 flex items-center gap-3">
+                    <span className="text-gray-500 text-xs w-5">{i + 1}</span>
+                    <span className="text-white font-bold text-sm w-10">{m.hand}</span>
+                    <span className="text-gray-400 text-xs flex-1 truncate">{m.situation}</span>
+                    <span
+                      className="px-2 py-0.5 rounded text-xs font-medium"
+                      style={{
+                        backgroundColor: ACTION_COLORS[m.correctAction]?.bg || '#374151',
+                        color: ACTION_COLORS[m.correctAction]?.text || '#d1d5db',
+                      }}
+                    >
+                      {actionLabel(m.correctAction)}
+                    </span>
+                    <span className="text-red-400 text-xs">{m.count}회</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {Object.keys(stats.confusion).length > 0 && (
+            <div className="w-full">
+              <h3 className="text-sm font-medium text-gray-400 mb-2">액션별 혼동 분석</h3>
+              <div className="space-y-1.5">
+                {Object.entries(stats.confusion).map(([correct, wrongMap]) => (
+                  <div key={correct} className="bg-gray-800/50 rounded p-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-gray-500 text-xs">정답:</span>
+                      <span
+                        className="px-2 py-0.5 rounded text-xs font-medium"
+                        style={{
+                          backgroundColor: ACTION_COLORS[correct]?.bg || '#374151',
+                          color: ACTION_COLORS[correct]?.text || '#d1d5db',
+                        }}
+                      >
+                        {actionLabel(correct)}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-2 ml-4">
+                      {Object.entries(wrongMap)
+                        .sort((a, b) => b[1] - a[1])
+                        .map(([wrong, count]) => (
+                          <span key={wrong} className="text-xs text-gray-400">
+                            → {actionLabel(wrong)}{' '}
+                            <span className="text-red-400">{count}회</span>
+                          </span>
+                        ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
       )}
 
-<ErrorTable
-        records={records.filter(r => !r.correct)}
-        onReview={r => onNavigate({ kind: 'review', question: r.question })}
-      />
+      {tab === 'wrongs' && (
+        <ErrorTable
+          records={wrongRecords}
+          onReview={r => onNavigate({ kind: 'review', question: r.question })}
+        />
+      )}
 
 <div className="flex gap-2 flex-wrap justify-center pt-2">
         <button
