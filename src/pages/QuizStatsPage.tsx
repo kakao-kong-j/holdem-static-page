@@ -1,7 +1,8 @@
 import { useState, useMemo, useRef } from 'react';
-import { ACTION_COLORS } from '../constants';
+import { ACTION_COLORS, POSITION_COLORS } from '../constants';
 import { RangeGrid } from '../components/RangeGrid';
 import { Legend } from '../components/Legend';
+import { Chip, ActionChip } from '../components/Chip';
 import { buildHandAction, buildActionStats } from '../utils/hand';
 import {
   loadQuizRecords,
@@ -26,7 +27,13 @@ import type { NavigateIntent } from '../App';
 
 type Filter = { type: 'stack'; value: string } | { type: 'position'; value: string } | null;
 
-function WrongList({ records, data }: { records: QuizRecord[]; data: AllData }) {
+function WrongListChips({
+  records,
+  data,
+}: {
+  records: QuizRecord[];
+  data: AllData;
+}) {
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
 
   if (records.length === 0) {
@@ -43,42 +50,40 @@ function WrongList({ records, data }: { records: QuizRecord[]; data: AllData }) 
     : null;
 
   return (
-    <div className="mt-2 space-y-1">
-      {records.map((r, i) => (
-        <div key={i}>
-          <button
-            onClick={() => setSelectedIdx(prev => (prev === i ? null : i))}
-            className={`w-full rounded p-2.5 flex items-center gap-3 text-sm text-left transition-colors ${
-              selectedIdx === i
-                ? 'bg-indigo-900/40 ring-1 ring-indigo-500'
-                : 'bg-gray-900/50 hover:bg-gray-800/50'
-            }`}
-          >
-            <span className="text-white font-bold w-10">{r.question.hand}</span>
-            <span className="text-gray-400 text-xs flex-1 truncate">{r.question.situation}</span>
-            <span
-              className="px-2 py-0.5 rounded text-xs font-medium line-through opacity-60"
-              style={{
-                backgroundColor: ACTION_COLORS[r.userAnswer]?.bg || '#374151',
-                color: ACTION_COLORS[r.userAnswer]?.text || '#d1d5db',
-              }}
+    <div className="mt-2">
+      <div className="flex flex-wrap gap-1.5">
+        {records.map((r, i) => {
+          const correctColor = ACTION_COLORS[r.question.correctAction];
+          const userColor = ACTION_COLORS[r.userAnswer];
+          return (
+            <Chip
+              key={i}
+              size="sm"
+              selected={selectedIdx === i}
+              onClick={() => setSelectedIdx(prev => (prev === i ? null : i))}
+              title={r.question.situation}
+              accent={correctColor?.bg}
+              label={r.question.hand}
             >
-              {actionLabel(r.userAnswer)}
-            </span>
-            <span className="text-gray-600">→</span>
-            <span
-              className="px-2 py-0.5 rounded text-xs font-medium"
-              style={{
-                backgroundColor: ACTION_COLORS[r.question.correctAction]?.bg || '#374151',
-                color: ACTION_COLORS[r.question.correctAction]?.text || '#d1d5db',
-              }}
-            >
-              {actionLabel(r.question.correctAction)}
-            </span>
-          </button>
-          {selectedIdx === i && chartData && <ChartPreview chartData={chartData} chartName={r.question.chartName} />}
-        </div>
-      ))}
+              <ActionChip
+                actionLabel={actionLabel(r.userAnswer)}
+                actionBg={userColor?.bg || '#374151'}
+                actionText={userColor?.text || '#d1d5db'}
+                strike
+              />
+              <span className="text-gray-500">→</span>
+              <ActionChip
+                actionLabel={actionLabel(r.question.correctAction)}
+                actionBg={correctColor?.bg || '#374151'}
+                actionText={correctColor?.text || '#d1d5db'}
+              />
+            </Chip>
+          );
+        })}
+      </div>
+      {selected && chartData && (
+        <ChartPreview chartData={chartData} chartName={selected.question.chartName} />
+      )}
     </div>
   );
 }
@@ -92,6 +97,13 @@ function interpret(delta: number, positiveLabel: string, negativeLabel: string, 
   if (delta > 2) return positiveLabel;
   if (delta < -2) return negativeLabel;
   return neutralLabel;
+}
+
+function deltaAccent(v: number | null): string | undefined {
+  if (v === null) return undefined;
+  if (v > 2) return '#fb923c'; // orange-400
+  if (v < -2) return '#38bdf8'; // sky-400
+  return '#6b7280'; // gray-500
 }
 
 function deltaColor(v: number): string {
@@ -188,26 +200,32 @@ function PlayStyleSection({ d }: { d: ReturnType<typeof computeDeviationStats> }
           라벨에 커서/터치하면 상세 보임 · 중심선 = GTO 일치
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-1.5 mt-2">
-        {axes.map(a => (
-          <div key={a.key} className="bg-gray-800/50 rounded px-2 py-1.5 flex items-center justify-between text-xs">
-            <span className="text-gray-400">{a.label}</span>
-            <span className="flex items-center gap-2">
-              {a.value === null ? (
-                <span className="text-gray-600">데이터 없음</span>
-              ) : (
-                <>
-                  <span className="text-gray-400">
-                    {interpret(a.value, a.positiveLabel, a.negativeLabel)}
-                  </span>
-                  <span className={`font-bold ${deltaColor(a.value)} w-14 text-right`}>
-                    {formatDelta(a.value)}
-                  </span>
-                </>
-              )}
-            </span>
-          </div>
-        ))}
+      <div className="flex flex-wrap gap-1.5 mt-2">
+        {axes.map(a => {
+          const titleParts: string[] = [];
+          if (a.value !== null) {
+            titleParts.push(interpret(a.value, a.positiveLabel, a.negativeLabel));
+          }
+          if (a.userValue != null && a.gtoValue != null) {
+            titleParts.push(`나 ${a.userValue.toFixed(1)}% vs GTO ${a.gtoValue.toFixed(1)}%`);
+          }
+          return (
+            <Chip
+              key={a.key}
+              size="sm"
+              accent={deltaAccent(a.value)}
+              title={titleParts.join(' · ')}
+              label={a.label}
+              value={
+                a.value === null ? (
+                  <span className="text-gray-600">-</span>
+                ) : (
+                  <span className={`font-bold ${deltaColor(a.value)}`}>{formatDelta(a.value)}</span>
+                )
+              }
+            />
+          );
+        })}
       </div>
       <div className="text-xs text-gray-500 mt-2 space-y-0.5">
         <div>
@@ -259,72 +277,60 @@ function HeaderCard({ profile }: { profile: PlayerProfile }) {
   );
 }
 
-function severityBadge(severity: number): { label: string; cls: string } {
-  if (severity >= 0.66) return { label: '상', cls: 'bg-red-900/60 text-red-300' };
-  if (severity >= 0.33) return { label: '중', cls: 'bg-yellow-900/60 text-yellow-300' };
-  return { label: '하', cls: 'bg-gray-800/60 text-gray-400' };
+function severityInfo(severity: number): { label: string; accent: string; cls: string } {
+  if (severity >= 0.66) return { label: '상', accent: '#f87171', cls: 'bg-red-900/60 text-red-300' };
+  if (severity >= 0.33) return { label: '중', accent: '#facc15', cls: 'bg-yellow-900/60 text-yellow-300' };
+  return { label: '하', accent: '#6b7280', cls: 'bg-gray-800/60 text-gray-400' };
 }
 
-function ChartLinkButton({
-  chartLink, onNavigate, label = '차트 보기', variant = 'primary',
-}: {
-  chartLink: { stack: import('../types').StackSize; chartName: string; viewType: 'open-range' | 'sb-open' | 'facing' };
-  onNavigate: (i: NavigateIntent) => void;
-  label?: string;
-  variant?: 'primary' | 'subtle';
-}) {
-  const cls = variant === 'subtle'
-    ? 'px-2 py-0.5 text-[10px] bg-gray-700 hover:bg-indigo-600 text-gray-200'
-    : 'px-2.5 py-1 text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-medium';
-  return (
-    <button
-      onClick={() => onNavigate({
-        kind: 'chart',
-        stack: chartLink.stack,
-        chartName: chartLink.chartName,
-        viewType: chartLink.viewType,
-      })}
-      className={`shrink-0 rounded ${cls}`}
-    >
-      {label}
-    </button>
-  );
-}
-
-function WeaknessCard({
-  s, onNavigate,
+function WeaknessChip({
+  s,
+  rank,
+  onNavigate,
 }: {
   s: WeaknessSummary;
+  rank?: number;
   onNavigate: (i: NavigateIntent) => void;
 }) {
-  const sev = severityBadge(s.severity);
+  const sev = severityInfo(s.severity);
+  const tooltip = [
+    s.meta.description,
+    s.meta.tag.length > 0 ? `태그: ${s.meta.tag.join(', ')}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n');
   return (
-    <div className="bg-gray-800/60 rounded-lg p-3 border border-gray-700">
-      <div className="flex items-start gap-2">
-        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-red-900/60 text-red-300 text-xs font-bold shrink-0">
-          {s.rank}
-        </span>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-white font-semibold text-sm">{s.meta.title}</span>
-            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${sev.cls}`}>{sev.label}</span>
-            <span className="text-gray-500 text-[10px]">{s.errorCount}/{s.spotCount}회</span>
-          </div>
-          <div className="text-gray-400 text-xs mt-0.5">{s.meta.description}</div>
-          <div className="flex flex-wrap gap-1 mt-1">
-            {s.meta.tag.map(t => (
-              <span key={t} className="text-[10px] text-gray-500">{t}</span>
-            ))}
-          </div>
-        </div>
-        <ChartLinkButton chartLink={s.meta.chartLink} onNavigate={onNavigate} />
-      </div>
-    </div>
+    <Chip
+      size="sm"
+      accent={sev.accent}
+      title={tooltip}
+      onClick={() =>
+        onNavigate({
+          kind: 'chart',
+          stack: s.meta.chartLink.stack,
+          chartName: s.meta.chartLink.chartName,
+          viewType: s.meta.chartLink.viewType,
+        })
+      }
+      label={
+        <>
+          {rank !== undefined && <span className="text-red-300 mr-1">#{rank}</span>}
+          {s.meta.title}
+        </>
+      }
+    >
+      <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${sev.cls}`}>{sev.label}</span>
+      <span className="text-gray-500 text-[10px]">
+        {s.errorCount}/{s.spotCount}
+      </span>
+    </Chip>
   );
 }
 
-function WeaknessAllTable({
-  analysis, onNavigate, tagFilter,
+function WeaknessAllChips({
+  analysis,
+  onNavigate,
+  tagFilter,
 }: {
   analysis: WeaknessAnalysis;
   onNavigate: (i: NavigateIntent) => void;
@@ -350,31 +356,68 @@ function WeaknessAllTable({
       });
   }, [analysis, tagFilter]);
 
+  const grouped = useMemo(() => {
+    const m: Record<string, typeof rows> = {};
+    for (const r of rows) {
+      const cat = r.meta.category;
+      if (!m[cat]) m[cat] = [];
+      m[cat].push(r);
+    }
+    return m;
+  }, [rows]);
+
+  const categories = Object.keys(grouped).sort();
+
   return (
-    <div className="w-full text-xs">
-      <div className="grid grid-cols-[24px_1fr_auto_auto_auto] gap-2 px-2 py-1 text-gray-500 font-medium border-b border-gray-800">
-        <span>군</span><span>약점</span><span>오답</span><span>심각도</span><span></span>
-      </div>
-      {rows.map(r => {
-        const sev = severityBadge(r.severity);
-        return (
-          <div key={r.id} className="grid grid-cols-[24px_1fr_auto_auto_auto] gap-2 px-2 py-1.5 items-center border-b border-gray-800/50 hover:bg-gray-800/30">
-            <span className="text-gray-500">{r.meta.category}</span>
-            <span className="text-gray-300 truncate" title={r.meta.description}>{r.meta.title}</span>
-            <span className={r.errorCount > 0 ? 'text-red-400 font-medium' : 'text-gray-600'}>
-              {r.errorCount}/{r.spotCount}
-            </span>
-            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${sev.cls}`}>{sev.label}</span>
-            <ChartLinkButton chartLink={r.meta.chartLink} onNavigate={onNavigate} label="차트" variant="subtle" />
+    <div className="w-full space-y-2">
+      {categories.map(cat => (
+        <div key={cat}>
+          <div className="text-[10px] text-gray-500 mb-1 font-medium">분류 {cat}</div>
+          <div className="flex flex-wrap gap-1.5">
+            {grouped[cat].map(r => {
+              const sev = severityInfo(r.severity);
+              const hasErrors = r.errorCount > 0;
+              return (
+                <Chip
+                  key={r.id}
+                  size="sm"
+                  accent={hasErrors ? sev.accent : '#374151'}
+                  title={r.meta.description}
+                  onClick={() =>
+                    onNavigate({
+                      kind: 'chart',
+                      stack: r.meta.chartLink.stack,
+                      chartName: r.meta.chartLink.chartName,
+                      viewType: r.meta.chartLink.viewType,
+                    })
+                  }
+                  label={r.meta.title}
+                >
+                  <span
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                      hasErrors ? sev.cls : 'bg-gray-800 text-gray-500'
+                    }`}
+                  >
+                    {sev.label}
+                  </span>
+                  <span
+                    className={`text-[10px] ${hasErrors ? 'text-red-400 font-medium' : 'text-gray-600'}`}
+                  >
+                    {r.errorCount}/{r.spotCount}
+                  </span>
+                </Chip>
+              );
+            })}
           </div>
-        );
-      })}
+        </div>
+      ))}
     </div>
   );
 }
 
 function WeaknessSection({
-  analysis, onNavigate,
+  analysis,
+  onNavigate,
 }: {
   analysis: WeaknessAnalysis;
   onNavigate: (i: NavigateIntent) => void;
@@ -408,40 +451,40 @@ function WeaknessSection({
       )}
 
       {!showAll && analysis.top3.length > 0 && (
-        <div className="space-y-2">
+        <div className="flex flex-wrap gap-1.5">
           {analysis.top3.map(s => (
-            <WeaknessCard key={s.weaknessId} s={s} onNavigate={onNavigate} />
+            <WeaknessChip key={s.weaknessId} s={s} rank={s.rank} onNavigate={onNavigate} />
           ))}
         </div>
       )}
 
       {showAll && (
         <>
-          <div className="flex flex-wrap gap-1 mb-2">
-            <button
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            <Chip
+              size="xs"
+              selected={tagFilter === null}
               onClick={() => setTagFilter(null)}
-              className={`text-[10px] px-2 py-0.5 rounded ${tagFilter === null ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
-            >
-              전체
-            </button>
+              label="전체"
+            />
             {ALL_TAGS.map(t => (
-              <button
+              <Chip
                 key={t}
+                size="xs"
+                selected={tagFilter === t}
                 onClick={() => setTagFilter(t)}
-                className={`text-[10px] px-2 py-0.5 rounded ${tagFilter === t ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
-              >
-                {t}
-              </button>
+                label={t}
+              />
             ))}
           </div>
-          <WeaknessAllTable analysis={analysis} onNavigate={onNavigate} tagFilter={tagFilter} />
+          <WeaknessAllChips analysis={analysis} onNavigate={onNavigate} tagFilter={tagFilter} />
         </>
       )}
     </div>
   );
 }
 
-function ErrorTable({
+function ErrorChips({
   records,
   onReview,
 }: {
@@ -449,48 +492,49 @@ function ErrorTable({
   onReview: (r: QuizRecord) => void;
 }) {
   if (records.length === 0) return null;
+  const shown = records.slice(0, 50);
   return (
     <div className="w-full">
       <h3 className="text-sm font-medium text-gray-400 mb-2">오답 목록 ({records.length}건)</h3>
-      <div className="space-y-1">
-        {records.slice(0, 50).map((r, i) => (
-          <div key={i} className="bg-gray-800/50 rounded px-2 py-1.5 flex items-center gap-2 text-xs">
-            <span className="text-gray-500 font-mono w-12 shrink-0">{r.question.stackSize}</span>
-            <span className="text-white font-bold w-10 shrink-0">{r.question.hand}</span>
-            <span className="text-gray-400 flex-1 truncate">{r.question.situation || r.question.chartName}</span>
-            <span
-              className="px-1.5 py-0.5 rounded text-[10px] font-medium line-through opacity-60 shrink-0"
-              style={{
-                backgroundColor: ACTION_COLORS[r.userAnswer]?.bg || '#374151',
-                color: ACTION_COLORS[r.userAnswer]?.text || '#d1d5db',
-              }}
-            >
-              {actionLabel(r.userAnswer)}
-            </span>
-            <span className="text-gray-600 shrink-0">→</span>
-            <span
-              className="px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0"
-              style={{
-                backgroundColor: ACTION_COLORS[r.question.correctAction]?.bg || '#374151',
-                color: ACTION_COLORS[r.question.correctAction]?.text || '#d1d5db',
-              }}
-            >
-              {actionLabel(r.question.correctAction)}
-            </span>
-            <button
+      <div className="flex flex-wrap gap-1.5">
+        {shown.map((r, i) => {
+          const correctColor = ACTION_COLORS[r.question.correctAction];
+          const userColor = ACTION_COLORS[r.userAnswer];
+          return (
+            <Chip
+              key={i}
+              size="sm"
+              accent={correctColor?.bg}
+              title={r.question.situation || r.question.chartName}
               onClick={() => onReview(r)}
-              className="shrink-0 px-2 py-0.5 bg-gray-700 hover:bg-indigo-600 text-gray-200 hover:text-white rounded text-[10px] font-medium transition-colors"
+              label={
+                <>
+                  <span className="text-gray-500 font-mono mr-1">{r.question.stackSize}</span>
+                  <span className="text-white">{r.question.hand}</span>
+                </>
+              }
             >
-              복습
-            </button>
-          </div>
-        ))}
-        {records.length > 50 && (
-          <div className="text-center text-xs text-gray-500 mt-2">
-            최신 50건만 표시 (총 {records.length}건)
-          </div>
-        )}
+              <ActionChip
+                actionLabel={actionLabel(r.userAnswer)}
+                actionBg={userColor?.bg || '#374151'}
+                actionText={userColor?.text || '#d1d5db'}
+                strike
+              />
+              <span className="text-gray-500">→</span>
+              <ActionChip
+                actionLabel={actionLabel(r.question.correctAction)}
+                actionBg={correctColor?.bg || '#374151'}
+                actionText={correctColor?.text || '#d1d5db'}
+              />
+            </Chip>
+          );
+        })}
       </div>
+      {records.length > 50 && (
+        <div className="text-center text-xs text-gray-500 mt-2">
+          최신 50건만 표시 (총 {records.length}건)
+        </div>
+      )}
     </div>
   );
 }
@@ -646,120 +690,131 @@ export function QuizStatsPage({ data, onNavigate }: QuizStatsPageProps) {
 
       <WeaknessSection analysis={profile.weaknessAnalysis} onNavigate={onNavigate} />
 
-
-<div className="w-full">
+      <div className="w-full">
         <h3 className="text-sm font-medium text-gray-400 mb-2">스택별 정답률</h3>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="flex flex-wrap gap-2">
           {Object.entries(stats.stackBuckets).map(([stack, b]) => (
-            <button
+            <Chip
               key={stack}
+              size="md"
+              selected={filter?.type === 'stack' && filter.value === stack}
               onClick={() => toggleFilter('stack', stack)}
-              className={`rounded p-3 flex justify-between text-left transition-colors ${
-                filter?.type === 'stack' && filter.value === stack
-                  ? 'bg-indigo-900/50 ring-1 ring-indigo-500'
-                  : 'bg-gray-800/50 hover:bg-gray-700/50'
-              }`}
-            >
-              <span className="text-gray-300 font-mono text-sm">{stack}</span>
-              <span className="text-white font-medium text-sm">
-                {pct(b.correct, b.total)}{' '}
-                <span className="text-gray-500 text-xs">({b.total})</span>
-              </span>
-            </button>
+              label={<span className="font-mono">{stack}</span>}
+              value={
+                <>
+                  <span className="text-white font-medium">{pct(b.correct, b.total)}</span>
+                  <span className="text-gray-500 ml-1">({b.total})</span>
+                </>
+              }
+            />
           ))}
         </div>
-        {filter?.type === 'stack' && <WrongList key={filter.value} records={filteredWrong} data={data} />}
+        {filter?.type === 'stack' && <WrongListChips key={filter.value} records={filteredWrong} data={data} />}
       </div>
 
-<div className="w-full">
+      <div className="w-full">
         <h3 className="text-sm font-medium text-gray-400 mb-2">포지션별 정답률</h3>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="flex flex-wrap gap-2">
           {Object.entries(stats.posBuckets).map(([pos, b]) => (
-            <button
+            <Chip
               key={pos}
+              size="md"
+              accent={POSITION_COLORS[pos]}
+              selected={filter?.type === 'position' && filter.value === pos}
               onClick={() => toggleFilter('position', pos)}
-              className={`rounded p-3 flex justify-between text-left transition-colors ${
-                filter?.type === 'position' && filter.value === pos
-                  ? 'bg-indigo-900/50 ring-1 ring-indigo-500'
-                  : 'bg-gray-800/50 hover:bg-gray-700/50'
-              }`}
-            >
-              <span className="text-gray-300 text-sm">{pos}</span>
-              <span className="text-white font-medium text-sm">
-                {pct(b.correct, b.total)}{' '}
-                <span className="text-gray-500 text-xs">({b.total})</span>
-              </span>
-            </button>
+              label={pos}
+              value={
+                <>
+                  <span className="text-white font-medium">{pct(b.correct, b.total)}</span>
+                  <span className="text-gray-500 ml-1">({b.total})</span>
+                </>
+              }
+            />
           ))}
         </div>
-        {filter?.type === 'position' && <WrongList key={filter.value} records={filteredWrong} data={data} />}
+        {filter?.type === 'position' && <WrongListChips key={filter.value} records={filteredWrong} data={data} />}
       </div>
 
-{stats.topMisses.length > 0 && (
+      {stats.topMisses.length > 0 && (
         <div className="w-full">
           <h3 className="text-sm font-medium text-gray-400 mb-2">자주 틀리는 핸드 TOP 10</h3>
-          <div className="space-y-1.5">
-            {stats.topMisses.map((m, i) => (
-              <div key={i} className="bg-gray-800/50 rounded p-3 flex items-center gap-3">
-                <span className="text-gray-500 text-xs w-5">{i + 1}</span>
-                <span className="text-white font-bold text-sm w-10">{m.hand}</span>
-                <span className="text-gray-400 text-xs flex-1 truncate">{m.situation}</span>
-                <span
-                  className="px-2 py-0.5 rounded text-xs font-medium"
-                  style={{
-                    backgroundColor: ACTION_COLORS[m.correctAction]?.bg || '#374151',
-                    color: ACTION_COLORS[m.correctAction]?.text || '#d1d5db',
-                  }}
+          <div className="flex flex-wrap gap-1.5">
+            {stats.topMisses.map((m, i) => {
+              const color = ACTION_COLORS[m.correctAction];
+              return (
+                <Chip
+                  key={i}
+                  size="sm"
+                  accent={color?.bg}
+                  title={m.situation}
+                  label={
+                    <>
+                      <span className="text-gray-500 mr-1">#{i + 1}</span>
+                      <span className="text-white">{m.hand}</span>
+                    </>
+                  }
                 >
-                  {actionLabel(m.correctAction)}
-                </span>
-                <span className="text-red-400 text-xs">{m.count}회</span>
-              </div>
-            ))}
+                  <ActionChip
+                    actionLabel={actionLabel(m.correctAction)}
+                    actionBg={color?.bg || '#374151'}
+                    actionText={color?.text || '#d1d5db'}
+                  />
+                  <span className="text-red-400 text-[10px]">{m.count}회</span>
+                </Chip>
+              );
+            })}
           </div>
         </div>
       )}
 
-{Object.keys(stats.confusion).length > 0 && (
+      {Object.keys(stats.confusion).length > 0 && (
         <div className="w-full">
           <h3 className="text-sm font-medium text-gray-400 mb-2">액션별 혼동 분석</h3>
           <div className="space-y-1.5">
-            {Object.entries(stats.confusion).map(([correct, wrongMap]) => (
-              <div key={correct} className="bg-gray-800/50 rounded p-3">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-gray-500 text-xs">정답:</span>
-                  <span
-                    className="px-2 py-0.5 rounded text-xs font-medium"
-                    style={{
-                      backgroundColor: ACTION_COLORS[correct]?.bg || '#374151',
-                      color: ACTION_COLORS[correct]?.text || '#d1d5db',
-                    }}
+            {Object.entries(stats.confusion).map(([correct, wrongMap]) => {
+              const correctColor = ACTION_COLORS[correct];
+              return (
+                <div key={correct} className="flex flex-wrap items-center gap-1.5">
+                  <Chip
+                    size="sm"
+                    accent={correctColor?.bg}
+                    label={<span className="text-gray-500">정답</span>}
                   >
-                    {actionLabel(correct)}
-                  </span>
-                </div>
-                <div className="flex flex-wrap gap-2 ml-4">
+                    <ActionChip
+                      actionLabel={actionLabel(correct)}
+                      actionBg={correctColor?.bg || '#374151'}
+                      actionText={correctColor?.text || '#d1d5db'}
+                      size="sm"
+                    />
+                  </Chip>
+                  <span className="text-gray-600 text-xs">→</span>
                   {Object.entries(wrongMap)
                     .sort((a, b) => b[1] - a[1])
-                    .map(([wrong, count]) => (
-                      <span key={wrong} className="text-xs text-gray-400">
-                        → {actionLabel(wrong)}{' '}
-                        <span className="text-red-400">{count}회</span>
-                      </span>
-                    ))}
+                    .map(([wrong, count]) => {
+                      const wrongColor = ACTION_COLORS[wrong];
+                      return (
+                        <Chip
+                          key={wrong}
+                          size="xs"
+                          accent={wrongColor?.bg}
+                          label={actionLabel(wrong)}
+                          value={<span className="text-red-400">{count}회</span>}
+                        />
+                      );
+                    })}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
 
-<ErrorTable
+      <ErrorChips
         records={records.filter(r => !r.correct)}
         onReview={r => onNavigate({ kind: 'review', question: r.question })}
       />
 
-<div className="flex gap-2 flex-wrap justify-center pt-2">
+      <div className="flex gap-2 flex-wrap justify-center pt-2">
         <button
           onClick={exportRecords}
           className="px-4 py-2 bg-gray-800 text-gray-300 rounded-lg text-sm hover:bg-gray-700"
