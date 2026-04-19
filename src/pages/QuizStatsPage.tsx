@@ -684,10 +684,14 @@ export function QuizStatsPage({ data, onNavigate }: QuizStatsPageProps) {
               >
                 퀴즈 시작
               </button>
-              <label className="px-4 py-2 bg-gray-800 text-gray-300 rounded-lg text-sm cursor-pointer hover:bg-gray-700">
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                className="px-4 py-2 bg-gray-800 text-gray-300 rounded-lg text-sm hover:bg-gray-700"
+              >
                 기록 가져오기
-                <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={handleImport} />
-              </label>
+              </button>
+              <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={handleImport} />
             </div>
           </div>
         )}
@@ -846,10 +850,14 @@ export function QuizStatsPage({ data, onNavigate }: QuizStatsPageProps) {
         >
           기록 내보내기
         </button>
-        <label className="px-4 py-2 bg-gray-800 text-gray-300 rounded-lg text-sm cursor-pointer hover:bg-gray-700">
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          className="px-4 py-2 bg-gray-800 text-gray-300 rounded-lg text-sm hover:bg-gray-700"
+        >
           기록 가져오기
-          <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={handleImport} />
-        </label>
+        </button>
+        <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={handleImport} />
         <button
           onClick={handleClear}
           className="px-4 py-2 bg-red-900/50 text-red-400 rounded-lg text-sm hover:bg-red-900/70"

@@ -33,8 +33,10 @@ npm run preview    # Preview production build
 
 ### Views (tab-based, no router)
 
-1. **Open Range** - Earliest position each hand can open from. Color = position color. One grid per stack size.
-2. **Facing Charts** - Specific situation charts (RFI, Facing RFI, vs 3bet, BvB). Color = action color. Dropdown selectors for group and chart.
+1. **Open Range** - Earliest non-SB position each hand can open from (UTG through BTN). Color = position color. One grid per stack size. SB is excluded here and lives in its own tab.
+2. **SB Open** - Dedicated view for SB's RFI range. Available at 15BB (call / all-in) and 100BB (limp / raise / raise_bluff). Not shown at 25/40BB where SB uses the standard RFI structure.
+3. **Facing Charts** - Specific situation charts. Two categories: `상대 오픈 대응` (Facing RFI / BvB) and `내 오픈 후 대응` (RFI vs Allin at 15BB, RFI vs 3bet at 100BB). Color = action color. Dropdown selectors for hero/villain; the second category is filtered out at stacks where no matching charts exist.
+4. **Quiz / Stats** - Practice quiz against chart data, plus stats (profile radar, accuracy, wrong list, GTO-vs-your-answer compare grid).
 
 ### Key Source Files
 
@@ -47,19 +49,34 @@ npm run preview    # Preview production build
 
 ### 100BB Special Cases
 
-- threebet split into value/bluff, plus "RFI vs 3bet" category (30 charts)
-- SB RFI has raise/raise_bluff/limp (all count as "open" in Open Range)
-- "RFI vs 3bet" UI: two dropdowns (opener → 3bettor with filtered mapping from OPENER_TO_3BETTOR)
+- threebet split into value/bluff, plus "RFI vs 3bet" category (27 reachable charts; `SB RFI vs BB 3bet` is intentionally filtered in `scenarioMap.ts`)
+- SB RFI has raise / raise_bluff / limp — rendered in the dedicated SB Open tab, NOT in the main Open Range
+- "RFI vs 3bet" UI: opener → 3bettor dropdown pair, villain filtered by `OPENER_TO_3BETTOR`
+
+### 15BB Special Cases
+
+- "RFI vs Allin" exists as both specific ("X RFI vs Y Allin") and generic ("X RFI vs Allin") forms. The generic form expands villain to every position after the opener.
+- SB Open tab shows the push/fold range: call vs all-in actions.
 
 ## Validation
 
-Open Range combo totals (must match exactly):
-- 15BB: 1020 open / 306 fold
-- 25BB: 1086 open / 240 fold
-- 40BB: 1074 open / 252 fold
-- 100BB: 934 open / 392 fold
+Combo totals (must match exactly; total = 1326 per stack).
 
-Full validation data in `prompt.md` section 7.
+**Open Range view** (UTG → BTN, SB/BB excluded):
+| Stack | open | fold |
+|---|---:|---:|
+| 15BB  | 518 | 808 |
+| 25BB  | 614 | 712 |
+| 40BB  | 674 | 652 |
+| 100BB | 678 | 648 |
+
+**SB Open view** (SB's RFI only; tab exists at 15BB and 100BB only):
+| Stack | open (breakdown) | fold |
+|---|---:|---:|
+| 15BB  | 1110 (call 804 + allIn 306) | 216 |
+| 100BB | 934 (limp 644 + raise 118 + raise_bluff 172) | 392 |
+
+Historical note: prior revisions of this doc listed combined totals (e.g. 1020/306 at 15BB, 934/392 at 100BB) that predated the Open Range / SB Open tab split. Those numbers are stale; use the tables above.
 
 ## Deployment
 
