@@ -91,9 +91,16 @@ function getScenariosForStack(
   let cached = scenarioCache.get(stack);
   if (!cached) {
     cached = [];
-    const excludeSbOpen = stack === '25BB' || stack === '40BB';
+    // Mirror SbOpenPage: prefer SB RFI BvB over the simple SB RFI when it
+    // exposes more action types (25BB / 40BB). Skip the other one so the
+    // SB situation shows up exactly once per stack.
+    const simple = stackData['SB RFI'];
+    const bvb = stackData['SB RFI BvB'];
+    const preferBvB =
+      !!bvb && Object.keys(bvb).length > Object.keys(simple ?? {}).length;
     for (const name of Object.keys(stackData)) {
-      if (excludeSbOpen && (name === 'SB RFI' || name === 'SB RFI BvB')) continue;
+      if (name === 'SB RFI' && preferBvB) continue;
+      if (name === 'SB RFI BvB' && !preferBvB) continue;
       const s = parseChartScenario(name);
       if (s) cached.push(s);
     }
