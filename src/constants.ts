@@ -24,6 +24,7 @@ export const ACTION_COLORS: Record<string, ColorDef> = {
   raise_call:     { bg: '#2AA875', text: '#fff', label: 'Rc' },
   limp_call:      { bg: '#D97632', text: '#fff', label: 'Lc' },
   limp_raise:     { bg: '#C94040', text: '#fff', label: 'Lr' },
+  limp_jam:       { bg: '#4A4A4A', text: '#fff', label: 'Lj' },
   limp_fold:      { bg: '#B8BD2A', text: '#4a4100', label: 'Lf' },
   fold:           { bg: 'transparent', text: '#6b7280', label: '-' },
 };
@@ -45,4 +46,5 @@ export const OPEN_RANGE_COLOR_MAP: Record<string, ColorDef> = Object.fromEntries
 ]);
 
 export const SB_RFI_CHART = 'SB RFI';
+export const SB_RFI_BVB_CHART = 'SB RFI BvB';
 
