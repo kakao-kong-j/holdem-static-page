@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { RangeGrid } from '../components/RangeGrid';
 import { Legend } from '../components/Legend';
-import { ACTION_COLORS, SB_RFI_CHART } from '../constants';
+import { ACTION_COLORS, SB_RFI_CHART, SB_RFI_BVB_CHART } from '../constants';
 import { buildHandAction, buildActionStats } from '../utils/hand';
 import type { StackData } from '../types';
 
@@ -10,7 +10,14 @@ interface Props {
 }
 
 export function SbOpenPage({ stackData }: Props) {
-  const chartData = stackData[SB_RFI_CHART];
+  // Prefer the BvB chart when it exposes more action types than the simple one
+  // (e.g. 25BB has 6-action limp/raise breakdown vs 3-action simple chart).
+  const simple = stackData[SB_RFI_CHART];
+  const bvb = stackData[SB_RFI_BVB_CHART];
+  const chartData =
+    bvb && Object.keys(bvb).length > Object.keys(simple ?? {}).length
+      ? bvb
+      : simple;
 
   const handAction = useMemo(
     () => (chartData ? buildHandAction(chartData) : {}),

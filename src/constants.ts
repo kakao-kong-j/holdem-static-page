@@ -45,4 +45,5 @@ export const OPEN_RANGE_COLOR_MAP: Record<string, ColorDef> = Object.fromEntries
 ]);
 
 export const SB_RFI_CHART = 'SB RFI';
+export const SB_RFI_BVB_CHART = 'SB RFI BvB';
 
