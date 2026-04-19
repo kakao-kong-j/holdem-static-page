@@ -25,7 +25,7 @@ const VIEWS: { value: View; label: string }[] = [
   { value: 'quiz-stats', label: '통계' },
 ];
 
-const SB_OPEN_DISABLED_STACKS: StackSize[] = ['40BB'];
+const SB_OPEN_DISABLED_STACKS: StackSize[] = [];
 
 function App() {
   const { isAuthenticated, login } = useAuth();
