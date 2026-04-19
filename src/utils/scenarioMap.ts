@@ -60,6 +60,21 @@ function parseChartName(name: string): ParsedChart | null {
     };
   }
 
+  // RFI vs Allin (no explicit villain): 내가 오픈 후 누구든 올인
+  // 데이터 상 "X RFI vs Allin" 형태로 존재 (예: LJ RFI vs Allin, CO RFI vs Allin)
+  const genericAllinMatch = name.match(/^(.+) RFI vs Allin$/);
+  if (genericAllinMatch) {
+    const heroes = expandPositions(genericAllinMatch[1]);
+    const heroIdx = heroes[0] ? ALL_POS_ORDER.indexOf(heroes[0] as typeof ALL_POS_ORDER[number]) : -1;
+    const villains = heroIdx >= 0 ? ALL_POS_ORDER.slice(heroIdx + 1) : [];
+    return {
+      heroes,
+      villains: [...villains],
+      label: '올인 대응',
+      category: '내 오픈 후 대응',
+    };
+  }
+
   if (name === 'SB RFI vs BB 3bet') return null;
 
   // RFI vs 3bet: 내가 오픈 후 상대 3bet (100BB)
