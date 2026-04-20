@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { RangeGrid } from './RangeGrid';
-import { OPEN_RANGE_POSITIONS, SB_RFI_CHART, STACK_SIZES } from '../constants';
+import { OPEN_RANGE_POSITIONS, SB_RFI_BVB_CHART, SB_RFI_CHART, STACK_SIZES } from '../constants';
 import { buildHandAction, buildOpenRangeData } from '../utils/hand';
 import {
   buildAnswerTitles,
@@ -33,9 +33,20 @@ const MODES: { key: Mode; label: string }[] = [
   { key: 'facing', label: 'Facing Charts' },
 ];
 
-const SB_OPEN_STACKS: StackSize[] = ['15BB', '100BB'];
-
 const FACING_CATEGORY: ScenarioCategory = '상대 오픈 대응';
+
+function resolveSbOpenChart(
+  stackData: Record<string, Record<string, string[]>>,
+): string | null {
+  const simple = stackData[SB_RFI_CHART];
+  const bvb = stackData[SB_RFI_BVB_CHART];
+  if (bvb && Object.keys(bvb).length > Object.keys(simple ?? {}).length) {
+    return SB_RFI_BVB_CHART;
+  }
+  if (simple) return SB_RFI_CHART;
+  if (bvb) return SB_RFI_BVB_CHART;
+  return null;
+}
 
 interface Props {
   data: AllData;
@@ -47,13 +58,9 @@ export function QuizCompareSection({ data, records }: Props) {
   const [stack, setStack] = useState<StackSize>('100BB');
   const [onlyWrong, setOnlyWrong] = useState(false);
 
-  useEffect(() => {
-    if (mode === 'sb-open' && !SB_OPEN_STACKS.includes(stack)) {
-      setStack('100BB');
-    }
-  }, [mode, stack]);
-
   const stackData = data[stack];
+
+  const sbOpenChart = useMemo(() => resolveSbOpenChart(stackData), [stackData]);
 
   const scenarioMap = useMemo(() => buildScenarioMap(stackData), [stackData]);
 
@@ -105,12 +112,14 @@ export function QuizCompareSection({ data, records }: Props) {
     }
 
     if (mode === 'sb-open') {
-      const chart = stackData[SB_RFI_CHART];
+      const chart = sbOpenChart ? stackData[sbOpenChart] : undefined;
       return {
         left: chart ? buildHandAction(chart) : {},
-        right: fillUnanswered(latestUserAnswersByHand(records, stack, SB_RFI_CHART)),
+        right: fillUnanswered(
+          sbOpenChart ? latestUserAnswersByHand(records, stack, sbOpenChart) : {},
+        ),
         colorMap: COMPARE_ACTION_COLORMAP,
-        title: `${stack} · ${SB_RFI_CHART}`,
+        title: sbOpenChart ? `${stack} · ${sbOpenChart}` : `${stack} · SB Open`,
         missing: !chart,
       };
     }
@@ -125,7 +134,7 @@ export function QuizCompareSection({ data, records }: Props) {
       title: selectedChart ? `${stack} · ${selectedChart}` : `${stack} · 차트 선택`,
       missing: !chart,
     };
-  }, [mode, stack, stackData, records, selectedChart]);
+  }, [mode, stack, stackData, records, selectedChart, sbOpenChart]);
 
   const rightRecords = useMemo(() => {
     if (mode === 'open-range') {
@@ -135,13 +144,13 @@ export function QuizCompareSection({ data, records }: Props) {
         r => r.question.stackSize === stack && rfiCharts.has(r.question.chartName),
       );
     }
-    const targetChart = mode === 'sb-open' ? SB_RFI_CHART : selectedChart;
+    const targetChart = mode === 'sb-open' ? sbOpenChart : selectedChart;
     if (!targetChart) return {};
     return latestRecordsByHand(
       records,
       r => r.question.stackSize === stack && r.question.chartName === targetChart,
     );
-  }, [mode, stack, records, selectedChart]);
+  }, [mode, stack, records, selectedChart, sbOpenChart]);
 
   const summary = useMemo(
     () =>
@@ -196,25 +205,19 @@ export function QuizCompareSection({ data, records }: Props) {
       </div>
 
       <div className="flex gap-1.5 flex-wrap justify-center">
-        {STACK_SIZES.map(s => {
-          const disabled = mode === 'sb-open' && !SB_OPEN_STACKS.includes(s);
-          return (
-            <button
-              key={s}
-              onClick={() => !disabled && setStack(s)}
-              disabled={disabled}
-              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-                disabled
-                  ? 'bg-gray-800/40 text-gray-600 cursor-not-allowed'
-                  : stack === s
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
-              }`}
-            >
-              {s}
-            </button>
-          );
-        })}
+        {STACK_SIZES.map(s => (
+          <button
+            key={s}
+            onClick={() => setStack(s)}
+            className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+              stack === s
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+            }`}
+          >
+            {s}
+          </button>
+        ))}
       </div>
 
       {mode === 'facing' && (
