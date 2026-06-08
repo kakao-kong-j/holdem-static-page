@@ -2,6 +2,7 @@ export type CoinPokerPosition = 'UTG' | 'LJ' | 'HJ' | 'CO' | 'BTN' | 'SB' | 'BB'
 
 export interface CoinPokerAction {
   player: string;
+  position?: CoinPokerPosition;
   action: string;
   line: string;
 }
@@ -36,7 +37,7 @@ const RANK_ORDER = 'AKQJT98765432';
 const VALID_SUITS = new Set(['c', 'd', 'h', 's']);
 const CARD_PATTERN = /^[2-9TJQKA][cdhs]$/i;
 const AMOUNT_PATTERN = '[\\d,]+(?:\\.\\d+)?';
-const SUPPORTED_RFI_POSITIONS: CoinPokerPosition[] = ['UTG', 'HJ', 'CO', 'BTN'];
+const SUPPORTED_RFI_POSITIONS: CoinPokerPosition[] = ['UTG', 'LJ', 'HJ', 'CO', 'BTN'];
 const VOLUNTARY_ACTIONS = new Set(['calls', 'raises', 'bets', 'ALLIN']);
 
 export function normalizeHoleCards(cards: string[]): string | null {
@@ -102,8 +103,9 @@ function parseHandBlock(block: string): CoinPokerHand | null {
   const tableSize = Number(table[1]);
   const buttonSeat = Number(table[2]);
   const blindSeats = parseBlindSeats(block, seats);
-  const heroPosition = deriveHeroPosition(seats, buttonSeat, heroSeatInfo.seat, blindSeats);
-  const preflopActions = parsePreflopActions(block);
+  const positionByPlayer = buildPositionByPlayer(seats, buttonSeat, blindSeats);
+  const heroPosition = positionByPlayer.get('Hero') ?? 'UNKNOWN';
+  const preflopActions = parsePreflopActions(block, positionByPlayer);
   const heroFirstAction = preflopActions.find((action) => action.player === 'Hero')?.action ?? null;
   const heroStackBb = roundToTwo(heroSeatInfo.stack / bigBlind);
   const exclusionReason = getExclusionReason(preflopActions, heroFirstAction, heroPosition);
@@ -147,7 +149,7 @@ function parseBlindSeats(block: string, seats: SeatInfo[]): { smallBlindSeat: nu
   };
 }
 
-function parsePreflopActions(block: string): CoinPokerAction[] {
+function parsePreflopActions(block: string, positionByPlayer: Map<string, CoinPokerPosition>): CoinPokerAction[] {
   const holeCardsIndex = block.indexOf('*** HOLE CARDS ***');
   if (holeCardsIndex === -1) return [];
 
@@ -159,14 +161,19 @@ function parsePreflopActions(block: string): CoinPokerAction[] {
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter((line) => line.length > 0 && !line.startsWith('Dealt to '))
-    .map(parseActionLine)
+    .map((line) => parseActionLine(line, positionByPlayer))
     .filter((action): action is CoinPokerAction => action !== null);
 }
 
-function parseActionLine(line: string): CoinPokerAction | null {
+function parseActionLine(line: string, positionByPlayer: Map<string, CoinPokerPosition>): CoinPokerAction | null {
   const allIn = line.match(/^(.+?):\s+ALLIN\b/);
   if (allIn) {
-    return { player: allIn[1], action: 'ALLIN', line };
+    return {
+      player: allIn[1],
+      position: positionByPlayer.get(allIn[1]),
+      action: 'ALLIN',
+      line,
+    };
   }
 
   const action = line.match(/^(.+?):\s+(folds|calls|checks|raises|bets)\b/);
@@ -174,12 +181,24 @@ function parseActionLine(line: string): CoinPokerAction | null {
 
   return {
     player: action[1],
+    position: positionByPlayer.get(action[1]),
     action: action[2],
     line,
   };
 }
 
-function deriveHeroPosition(
+function buildPositionByPlayer(
+  seats: SeatInfo[],
+  buttonSeat: number,
+  blindSeats: { smallBlindSeat: number | null; bigBlindSeat: number | null },
+): Map<string, CoinPokerPosition> {
+  return new Map(seats.map((seat) => [
+    seat.player,
+    derivePosition(seats, buttonSeat, seat.seat, blindSeats),
+  ]));
+}
+
+function derivePosition(
   seats: SeatInfo[],
   buttonSeat: number,
   heroSeat: number,

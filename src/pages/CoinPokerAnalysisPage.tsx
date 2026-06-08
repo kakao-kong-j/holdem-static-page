@@ -70,7 +70,7 @@ export function CoinPokerAnalysisPage({ stack, stackData }: Props) {
   const summaryItems = [
     { label: 'Hero 핸드', value: summary.parsedHands, tone: 'text-white' },
     { label: '비교 가능', value: summary.comparableHands, tone: 'text-sky-300' },
-    { label: '일치 오픈', value: summary.matches, tone: 'text-emerald-300' },
+    { label: '일치', value: summary.matches, tone: 'text-emerald-300' },
     { label: '누락 오픈', value: summary.missedOpens, tone: 'text-amber-300' },
     { label: '과잉 오픈', value: summary.extraOpens, tone: 'text-red-300' },
     { label: '제외', value: summary.excluded, tone: 'text-gray-400' },
@@ -225,7 +225,7 @@ export function CoinPokerAnalysisPage({ stack, stackData }: Props) {
 }
 
 function statusLabel(item: CoinPokerComparisonItem): string {
-  if (item.status === 'match-open') return '일치: 오픈';
+  if (item.status === 'match-open') return '일치: 플레이';
   if (item.status === 'match-fold') return '일치: 폴드';
   if (item.status === 'missed-open') return '누락 오픈';
   if (item.status === 'extra-open') return '과잉 오픈';

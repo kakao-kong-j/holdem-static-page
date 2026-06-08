@@ -14,6 +14,9 @@ const stackData: StackData = {
   'HJ RFI': { raise: ['TT'] },
   'CO RFI': { raise: ['KQo'] },
   'UTG RFI': { raise: ['QQ'] },
+  'LJ RFI': { raise: ['AQs'] },
+  'SB RFI BvB': { limp: ['T5o'], raise: ['AA'] },
+  'BTN vs CO RFI': { call: ['KQo'], threebet: ['AA'] },
 };
 
 function hand(overrides: Partial<CoinPokerHand>): CoinPokerHand {
@@ -79,7 +82,7 @@ describe('compareCoinPokerRfi', () => {
           rfiEligible: false,
           exclusionReason: 'prior-voluntary-action',
         }),
-        hand({ handId: 'unsupported-chart', heroPosition: 'LJ', rfiEligible: true }),
+        hand({ handId: 'unsupported-chart', heroPosition: 'UNKNOWN', rfiEligible: true }),
       ],
       stackData,
     );
@@ -93,7 +96,7 @@ describe('compareCoinPokerRfi', () => {
       },
       {
         status: 'excluded',
-        chartName: 'LJ RFI',
+        chartName: 'UNKNOWN RFI',
         gtoAction: 'unknown',
         exclusionReason: 'chart-not-found',
       },
@@ -113,6 +116,74 @@ describe('compareCoinPokerRfi', () => {
       gtoAction: 'fold',
       heroDecision: 'passive',
       exclusionReason: 'passive-action',
+    });
+  });
+
+  it('compares LJ first-in hands against the LJ RFI chart', () => {
+    const items = compareCoinPokerRfi(
+      [
+        hand({ handId: 'lj-open', heroPosition: 'LJ', heroHand: 'AQs', heroFirstAction: 'raises' }),
+      ],
+      stackData,
+    );
+
+    expect(items[0]).toMatchObject({
+      chartName: 'LJ RFI',
+      status: 'match-open',
+      gtoAction: 'open',
+      exclusionReason: null,
+    });
+  });
+
+  it('compares SB first-in hands against the SB open chart', () => {
+    const items = compareCoinPokerRfi(
+      [
+        hand({
+          handId: 'sb-limp',
+          heroPosition: 'SB',
+          heroHand: 'T5o',
+          heroFirstAction: 'calls',
+          rfiEligible: false,
+          exclusionReason: 'position-not-supported',
+          preflopActions: [{ player: 'Hero', position: 'SB', action: 'calls', line: 'Hero: calls 50' }],
+        }),
+      ],
+      stackData,
+    );
+
+    expect(items[0]).toMatchObject({
+      chartName: 'SB RFI BvB',
+      status: 'match-open',
+      gtoAction: 'open',
+      heroDecision: 'passive',
+      exclusionReason: null,
+    });
+  });
+
+  it('compares facing open spots against matching Facing RFI charts', () => {
+    const items = compareCoinPokerRfi(
+      [
+        hand({
+          handId: 'btn-vs-co',
+          heroHand: 'KQo',
+          heroFirstAction: 'calls',
+          rfiEligible: false,
+          exclusionReason: 'prior-voluntary-action',
+          preflopActions: [
+            { player: 'CO', position: 'CO', action: 'raises', line: 'CO: raises 200 to 300' },
+            { player: 'Hero', position: 'BTN', action: 'calls', line: 'Hero: calls 300' },
+          ],
+        }),
+      ],
+      stackData,
+    );
+
+    expect(items[0]).toMatchObject({
+      chartName: 'BTN vs CO RFI',
+      status: 'match-open',
+      gtoAction: 'open',
+      heroDecision: 'passive',
+      exclusionReason: null,
     });
   });
 });

@@ -137,6 +137,10 @@ describe('parseCoinPokerHands', () => {
       'folds',
       'ALLIN',
     ]);
+    expect(hands[0].preflopActions[3]).toMatchObject({
+      player: 'Hero',
+      position: 'BTN',
+    });
 
     expect(hands[1]).toMatchObject({
       handId: '68315300003',
@@ -175,6 +179,33 @@ describe('parseCoinPokerHands', () => {
       heroFirstAction: 'calls',
       rfiEligible: false,
       exclusionReason: 'position-not-supported',
+    });
+  });
+
+  it('keeps LJ first-in spots eligible when the table has an LJ position', () => {
+    const hands = parseCoinPokerHands(`CoinPoker Hand #68315300006: NLH (50/100/13) 2026/06/03 23:12:00 KST
+Tournament 'Level Up Freeroll' '63001' 7-max Seat #2 is the button
+Seat 2: btn (5,000 in chips)
+Seat 3: sb (5,000 in chips)
+Seat 4: bb (5,000 in chips)
+Seat 5: utg (5,000 in chips)
+Seat 6: Hero (5,000 in chips)
+Seat 7: hj (5,000 in chips)
+Seat 1: co (5,000 in chips)
+sb: posts small blind 50
+bb: posts big blind 100
+*** HOLE CARDS ***
+Dealt to Hero [As Qs]
+utg: folds
+Hero: raises 200 to 300
+hj: folds
+*** SUMMARY ***`);
+
+    expect(hands[0]).toMatchObject({
+      heroPosition: 'LJ',
+      heroHand: 'AQs',
+      rfiEligible: true,
+      exclusionReason: null,
     });
   });
 
