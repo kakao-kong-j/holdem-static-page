@@ -8,9 +8,10 @@ import { SbOpenPage } from './pages/SbOpenPage';
 import { FacingPage } from './pages/FacingPage';
 import { QuizPage } from './pages/QuizPage';
 import { QuizStatsPage } from './pages/QuizStatsPage';
+import { CoinPokerAnalysisPage } from './pages/CoinPokerAnalysisPage';
 import type { StackSize, QuizQuestion } from './types';
 
-type View = 'open-range' | 'sb-open' | 'facing' | 'quiz' | 'quiz-stats';
+type View = 'open-range' | 'sb-open' | 'facing' | 'quiz' | 'quiz-stats' | 'coinpoker';
 
 export type NavigateIntent =
   | { kind: 'chart'; stack: StackSize; chartName: string; viewType: 'open-range' | 'sb-open' | 'facing' }
@@ -23,6 +24,7 @@ const VIEWS: { value: View; label: string }[] = [
   { value: 'facing', label: 'Facing Charts' },
   { value: 'quiz', label: '퀴즈' },
   { value: 'quiz-stats', label: '통계' },
+  { value: 'coinpoker', label: 'CoinPoker 분석' },
 ];
 
 const SB_OPEN_DISABLED_STACKS: StackSize[] = [];
@@ -83,12 +85,12 @@ function App() {
   const stackData = data[stack];
 
   return (
-    <div className="min-h-screen p-4 max-w-4xl mx-auto">
+    <div className={`min-h-screen p-4 mx-auto ${view === 'coinpoker' ? 'max-w-7xl' : 'max-w-4xl'}`}>
       <h1 className="text-xl font-bold text-center mb-4 text-white">
         GTO Preflop Charts
       </h1>
 
-      <div className="flex justify-center gap-2 mb-4">
+      <div className="flex flex-wrap justify-center gap-2 mb-4">
         {VIEWS.map(({ value, label }) => (
           <button
             key={value}
@@ -119,6 +121,7 @@ function App() {
       {view === 'facing' && <FacingPage stackData={stackData} />}
       {view === 'quiz' && <QuizPage data={data} />}
       {view === 'quiz-stats' && <QuizStatsPage data={data} onNavigate={navigate} />}
+      {view === 'coinpoker' && <CoinPokerAnalysisPage stack={stack} stackData={stackData} />}
     </div>
   );
 }
