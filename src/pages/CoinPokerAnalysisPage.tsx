@@ -4,6 +4,7 @@ import {
   COINPOKER_COMPARE_COLORS,
   buildCoinPokerGrid,
   compareCoinPokerRfi,
+  groupCoinPokerItemsByHand,
   summarizeCoinPokerComparison,
   type CoinPokerComparisonItem,
 } from '../utils/coinpokerCompare';
@@ -20,6 +21,7 @@ const TABLE_LIMIT = 250;
 export function CoinPokerAnalysisPage({ stack, stackData }: Props) {
   const [rawText, setRawText] = useState('');
   const [fileError, setFileError] = useState<string | null>(null);
+  const [hoveredHand, setHoveredHand] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const inputVersionRef = useRef(0);
 
@@ -27,7 +29,9 @@ export function CoinPokerAnalysisPage({ stack, stackData }: Props) {
   const comparison = useMemo(() => compareCoinPokerRfi(parsedHands, stackData), [parsedHands, stackData]);
   const summary = useMemo(() => summarizeCoinPokerComparison(comparison), [comparison]);
   const comparisonGrid = useMemo(() => buildCoinPokerGrid(comparison), [comparison]);
+  const comparisonByHand = useMemo(() => groupCoinPokerItemsByHand(comparison), [comparison]);
   const tableRows = useMemo(() => comparison.slice(0, TABLE_LIMIT), [comparison]);
+  const hoveredItems = hoveredHand ? comparisonByHand[hoveredHand] ?? [] : [];
 
   const isEmpty = rawText.trim().length === 0;
   const hasUnparsedText = !isEmpty && parsedHands.length === 0;
@@ -144,9 +148,16 @@ export function CoinPokerAnalysisPage({ stack, stackData }: Props) {
             </div>
 
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-              <div className="min-w-0 flex-1 overflow-x-auto rounded-lg border border-gray-800 bg-gray-950/20 p-3">
-                <div className="min-w-max text-center">
-                  <RangeGrid handAction={comparisonGrid} colorMap={COINPOKER_COMPARE_COLORS} />
+              <div className="min-w-0 flex-1 rounded-lg border border-gray-800 bg-gray-950/20 p-3">
+                <div className="overflow-x-auto">
+                  <div className="min-w-max text-center">
+                    <RangeGrid
+                      handAction={comparisonGrid}
+                      colorMap={COINPOKER_COMPARE_COLORS}
+                      highlightedHand={hoveredHand}
+                      onHoverHand={setHoveredHand}
+                    />
+                  </div>
                 </div>
                 <div className="mt-3 flex flex-wrap justify-center gap-x-3 gap-y-1 text-xs text-gray-400">
                   {Object.entries(COINPOKER_COMPARE_COLORS).map(([status, color]) => (
@@ -156,6 +167,7 @@ export function CoinPokerAnalysisPage({ stack, stackData }: Props) {
                     </span>
                   ))}
                 </div>
+                <HoverSelectionPanel hoveredHand={hoveredHand} items={hoveredItems} />
               </div>
 
               <div className="min-w-0 flex-1 overflow-hidden rounded-lg border border-gray-800 bg-gray-950/20">
@@ -230,6 +242,61 @@ function statusLabel(item: CoinPokerComparisonItem): string {
   if (item.status === 'missed-open') return '누락 오픈';
   if (item.status === 'extra-open') return '과잉 오픈';
   return item.exclusionReason ?? '제외';
+}
+
+function HoverSelectionPanel({
+  hoveredHand,
+  items,
+}: {
+  hoveredHand: string | null;
+  items: CoinPokerComparisonItem[];
+}) {
+  if (!hoveredHand) {
+    return (
+      <div className="mt-3 rounded-md border border-gray-800 bg-gray-900/60 px-3 py-3 text-xs text-gray-500">
+        그리드의 핸드에 마우스를 올리면 Hero의 실제 선택들이 표시됩니다.
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 rounded-md border border-gray-800 bg-gray-900/60">
+      <div className="flex items-center justify-between gap-2 border-b border-gray-800 px-3 py-2">
+        <div className="text-sm font-semibold text-white">{hoveredHand}</div>
+        <div className="text-xs text-gray-500">{items.length} hands</div>
+      </div>
+      {items.length === 0 ? (
+        <div className="px-3 py-3 text-xs text-gray-500">
+          이 핸드로 기록된 Hero 선택이 없습니다.
+        </div>
+      ) : (
+        <div className="max-h-48 overflow-y-auto">
+          {items.slice(0, 12).map((item) => (
+            <div
+              key={`${item.hand.handId}-${item.chartName ?? 'none'}`}
+              className="grid grid-cols-[minmax(72px,1fr)_auto] gap-2 border-b border-gray-800/70 px-3 py-2 text-xs last:border-b-0"
+            >
+              <div className="min-w-0">
+                <div className="truncate font-mono text-gray-300">{item.hand.handId}</div>
+                <div className="mt-0.5 truncate text-gray-500">
+                  {item.hand.heroPosition} · {item.chartName ?? item.exclusionReason ?? '-'}
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-gray-200">{heroDecisionLabel(item.heroDecision)}</div>
+                <div className="mt-0.5 text-gray-500">{gtoActionLabel(item.gtoAction)} · {statusLabel(item)}</div>
+              </div>
+            </div>
+          ))}
+          {items.length > 12 && (
+            <div className="px-3 py-2 text-xs text-gray-500">
+              외 {items.length - 12}개 더 있음
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function heroDecisionLabel(decision: CoinPokerComparisonItem['heroDecision']): string {

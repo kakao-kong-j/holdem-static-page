@@ -238,6 +238,18 @@ export function buildCoinPokerGrid(items: CoinPokerComparisonItem[]): Record<str
   return grid;
 }
 
+export function groupCoinPokerItemsByHand(
+  items: CoinPokerComparisonItem[],
+): Record<string, CoinPokerComparisonItem[]> {
+  const grouped: Record<string, CoinPokerComparisonItem[]> = {};
+  for (const item of items) {
+    const handName = item.hand.heroHand;
+    if (!handName) continue;
+    grouped[handName] = [...(grouped[handName] ?? []), item];
+  }
+  return grouped;
+}
+
 function getHeroDecision(action: string | null): CoinPokerComparisonItem['heroDecision'] {
   if (action === 'raises' || action === 'ALLIN') return 'open';
   if (action === 'folds') return 'fold';

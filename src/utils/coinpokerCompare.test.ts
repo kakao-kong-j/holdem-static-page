@@ -4,6 +4,7 @@ import type { CoinPokerHand } from './coinpokerParser';
 import {
   buildCoinPokerGrid,
   compareCoinPokerRfi,
+  groupCoinPokerItemsByHand,
   summarizeCoinPokerComparison,
   type CoinPokerComparisonItem,
   type CoinPokerCompareStatus,
@@ -230,5 +231,19 @@ describe('buildCoinPokerGrid', () => {
     expect(grid.AKs).toBe('missed-open');
     expect(grid.KK).toBe('excluded');
     expect(grid.undefined).toBeUndefined();
+  });
+});
+
+describe('groupCoinPokerItemsByHand', () => {
+  it('groups comparison rows by normalized Hero hand and skips missing hands', () => {
+    const aaOpen = item('AA', 'match-open');
+    const aaExtra = item('AA', 'extra-open');
+    const missing = item(null, 'excluded');
+
+    const grouped = groupCoinPokerItemsByHand([aaOpen, aaExtra, missing]);
+
+    expect(grouped.AA).toEqual([aaOpen, aaExtra]);
+    expect(grouped.KK).toBeUndefined();
+    expect(grouped.undefined).toBeUndefined();
   });
 });
