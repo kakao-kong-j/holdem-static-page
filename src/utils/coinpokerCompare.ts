@@ -72,6 +72,18 @@ export function compareCoinPokerRfi(hands: CoinPokerHand[], stackData: StackData
 
     const chartAction = chartActions[hand.heroHand] ?? 'fold';
     const gtoAction = chartAction === 'fold' ? 'fold' : 'open';
+
+    if (gtoAction === 'fold' && heroDecision === 'passive') {
+      return {
+        hand,
+        chartName,
+        gtoAction,
+        heroDecision,
+        status: 'excluded',
+        exclusionReason: 'passive-action',
+      };
+    }
+
     const status = getStatus(gtoAction, heroDecision);
 
     return {

@@ -99,6 +99,22 @@ describe('compareCoinPokerRfi', () => {
       },
     ]);
   });
+
+  it('does not treat a passive first-in call as a fold match', () => {
+    const items = compareCoinPokerRfi(
+      [
+        hand({ handId: 'passive-trash', heroHand: '83o', heroFirstAction: 'calls' }),
+      ],
+      stackData,
+    );
+
+    expect(items[0]).toMatchObject({
+      status: 'excluded',
+      gtoAction: 'fold',
+      heroDecision: 'passive',
+      exclusionReason: 'passive-action',
+    });
+  });
 });
 
 describe('summarizeCoinPokerComparison', () => {
