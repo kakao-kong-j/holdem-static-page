@@ -4,7 +4,7 @@ import { buildHandAction, forEachHand } from './hand';
 import { buildScenarioMap, getScenarios } from './scenarioMap';
 
 export type CoinPokerCompareStatus = 'match-open' | 'match-fold' | 'missed-open' | 'extra-open' | 'excluded';
-export type CoinPokerGridStatus = CoinPokerCompareStatus | 'mixed';
+export type CoinPokerGridStatus = CoinPokerCompareStatus | 'match' | 'mixed';
 
 export interface CoinPokerComparisonItem {
   hand: CoinPokerHand;
@@ -33,6 +33,7 @@ export interface CoinPokerSummary {
 }
 
 export const COINPOKER_COMPARE_COLORS: Record<CoinPokerGridStatus, ColorDef> = {
+  match: { bg: '#059669', text: '#ecfdf5', label: 'Correct' },
   'match-open': { bg: '#059669', text: '#ecfdf5', label: 'Open match' },
   'match-fold': { bg: '#475569', text: '#f8fafc', label: 'Fold match' },
   'missed-open': { bg: '#f59e0b', text: '#111827', label: 'Missed open' },
@@ -215,7 +216,8 @@ export function summarizeCoinPokerComparison(items: CoinPokerComparisonItem[]): 
 
 export function buildCoinPokerGrid(items: CoinPokerComparisonItem[]): Record<string, string> {
   const grid: Record<string, string> = {};
-  const statusesByHand: Record<string, Set<CoinPokerCompareStatus>> = {};
+  const comparableCountsByHand: Record<string, number> = {};
+  const mistakeCountsByHand: Record<string, Partial<Record<CoinPokerCompareStatus, number>>> = {};
 
   forEachHand((hand) => {
     grid[hand] = 'excluded';
@@ -225,12 +227,26 @@ export function buildCoinPokerGrid(items: CoinPokerComparisonItem[]): Record<str
     const handName = item.hand.heroHand;
     if (!handName) continue;
     if (item.status === 'excluded') continue;
-    if (!statusesByHand[handName]) statusesByHand[handName] = new Set();
-    statusesByHand[handName].add(item.status);
+    comparableCountsByHand[handName] = (comparableCountsByHand[handName] ?? 0) + 1;
+
+    if (item.status === 'match-open' || item.status === 'match-fold') continue;
+    if (!mistakeCountsByHand[handName]) mistakeCountsByHand[handName] = {};
+    mistakeCountsByHand[handName][item.status] = (mistakeCountsByHand[handName][item.status] ?? 0) + 1;
   }
 
-  for (const [handName, statuses] of Object.entries(statusesByHand)) {
-    grid[handName] = statuses.size === 1 ? [...statuses][0] : 'mixed';
+  for (const handName of Object.keys(comparableCountsByHand)) {
+    const mistakeCounts = mistakeCountsByHand[handName];
+    if (!mistakeCounts) {
+      grid[handName] = 'match';
+      continue;
+    }
+
+    const rankedMistakes = Object.entries(mistakeCounts)
+      .sort(([, left], [, right]) => right - left);
+    const [topStatus, topCount] = rankedMistakes[0];
+    const [, nextCount] = rankedMistakes[1] ?? [];
+
+    grid[handName] = nextCount === topCount ? 'mixed' : topStatus;
   }
 
   return grid;

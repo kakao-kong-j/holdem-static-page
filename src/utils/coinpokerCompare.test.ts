@@ -217,9 +217,10 @@ describe('summarizeCoinPokerComparison', () => {
 });
 
 describe('buildCoinPokerGrid', () => {
-  it('returns a full default grid, marks mixed outcomes, and skips missing hands', () => {
+  it('returns a full default grid, prioritizes the most common mistake, and skips missing hands', () => {
     const grid = buildCoinPokerGrid([
       item('AA', 'match-open'),
+      item('AA', 'extra-open'),
       item('AA', 'extra-open'),
       item('AKs', 'match-fold'),
       item('AKs', 'missed-open'),
@@ -227,19 +228,39 @@ describe('buildCoinPokerGrid', () => {
     ]);
 
     expect(Object.keys(grid)).toHaveLength(169);
-    expect(grid.AA).toBe('mixed');
-    expect(grid.AKs).toBe('mixed');
+    expect(grid.AA).toBe('extra-open');
+    expect(grid.AKs).toBe('missed-open');
     expect(grid.KK).toBe('excluded');
     expect(grid.undefined).toBeUndefined();
   });
 
-  it('marks hands with mixed comparable outcomes as mixed instead of hiding folds behind extra opens', () => {
+  it('ignores correct answers when choosing the most common mistake', () => {
     const grid = buildCoinPokerGrid([
+      item('A3s', 'match-fold'),
       item('A3s', 'match-fold'),
       item('A3s', 'extra-open'),
     ]);
 
+    expect(grid.A3s).toBe('extra-open');
+  });
+
+  it('marks tied mistake counts as mixed', () => {
+    const grid = buildCoinPokerGrid([
+      item('A3s', 'match-fold'),
+      item('A3s', 'missed-open'),
+      item('A3s', 'extra-open'),
+    ]);
+
     expect(grid.A3s).toBe('mixed');
+  });
+
+  it('marks hands with only correct answers as correct', () => {
+    const grid = buildCoinPokerGrid([
+      item('A3s', 'match-fold'),
+      item('A3s', 'match-open'),
+    ]);
+
+    expect(grid.A3s).toBe('match');
   });
 });
 
