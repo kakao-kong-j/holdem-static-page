@@ -188,6 +188,14 @@ export function CoinPokerAnalysisPage({ fallbackStack, data }: Props) {
                     />
                   </div>
                 </div>
+                <div className="mt-3 flex flex-wrap justify-center gap-x-3 gap-y-1 text-xs text-gray-400">
+                  {Object.entries(COINPOKER_COMPARE_COLORS).map(([status, color]) => (
+                    <span key={status} className="inline-flex items-center gap-1.5">
+                      <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: color.bg }} />
+                      {color.label}
+                    </span>
+                  ))}
+                </div>
                 <HoverSelectionPanel
                   activeHand={activeHand}
                   pinnedHand={pinnedHand}
