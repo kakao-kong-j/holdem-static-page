@@ -4,6 +4,7 @@ import { buildHandAction, forEachHand } from './hand';
 import { buildScenarioMap, getScenarios } from './scenarioMap';
 
 export type CoinPokerCompareStatus = 'match-open' | 'match-fold' | 'missed-open' | 'extra-open' | 'excluded';
+export type CoinPokerGridStatus = CoinPokerCompareStatus | 'mixed';
 
 export interface CoinPokerComparisonItem {
   hand: CoinPokerHand;
@@ -31,20 +32,13 @@ export interface CoinPokerSummary {
   excluded: number;
 }
 
-export const COINPOKER_COMPARE_COLORS: Record<CoinPokerCompareStatus, ColorDef> = {
+export const COINPOKER_COMPARE_COLORS: Record<CoinPokerGridStatus, ColorDef> = {
   'match-open': { bg: '#059669', text: '#ecfdf5', label: 'Open match' },
   'match-fold': { bg: '#475569', text: '#f8fafc', label: 'Fold match' },
   'missed-open': { bg: '#f59e0b', text: '#111827', label: 'Missed open' },
   'extra-open': { bg: '#dc2626', text: '#fef2f2', label: 'Extra open' },
+  mixed: { bg: '#7c3aed', text: '#f5f3ff', label: 'Mixed' },
   excluded: { bg: '#111827', text: '#6b7280', label: 'Excluded' },
-};
-
-const STATUS_PRIORITY: Record<CoinPokerCompareStatus, number> = {
-  'extra-open': 5,
-  'missed-open': 4,
-  'match-open': 3,
-  'match-fold': 2,
-  excluded: 1,
 };
 
 export function compareCoinPokerRfi(hands: CoinPokerHand[], stackData: StackData): CoinPokerComparisonItem[] {
@@ -221,6 +215,8 @@ export function summarizeCoinPokerComparison(items: CoinPokerComparisonItem[]): 
 
 export function buildCoinPokerGrid(items: CoinPokerComparisonItem[]): Record<string, string> {
   const grid: Record<string, string> = {};
+  const statusesByHand: Record<string, Set<CoinPokerCompareStatus>> = {};
+
   forEachHand((hand) => {
     grid[hand] = 'excluded';
   });
@@ -228,11 +224,13 @@ export function buildCoinPokerGrid(items: CoinPokerComparisonItem[]): Record<str
   for (const item of items) {
     const handName = item.hand.heroHand;
     if (!handName) continue;
+    if (item.status === 'excluded') continue;
+    if (!statusesByHand[handName]) statusesByHand[handName] = new Set();
+    statusesByHand[handName].add(item.status);
+  }
 
-    const current = grid[handName] as CoinPokerCompareStatus | undefined;
-    if (!current || STATUS_PRIORITY[item.status] > STATUS_PRIORITY[current]) {
-      grid[handName] = item.status;
-    }
+  for (const [handName, statuses] of Object.entries(statusesByHand)) {
+    grid[handName] = statuses.size === 1 ? [...statuses][0] : 'mixed';
   }
 
   return grid;

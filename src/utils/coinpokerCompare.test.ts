@@ -217,7 +217,7 @@ describe('summarizeCoinPokerComparison', () => {
 });
 
 describe('buildCoinPokerGrid', () => {
-  it('returns a full default grid, applies status priority, and skips missing hands', () => {
+  it('returns a full default grid, marks mixed outcomes, and skips missing hands', () => {
     const grid = buildCoinPokerGrid([
       item('AA', 'match-open'),
       item('AA', 'extra-open'),
@@ -227,10 +227,19 @@ describe('buildCoinPokerGrid', () => {
     ]);
 
     expect(Object.keys(grid)).toHaveLength(169);
-    expect(grid.AA).toBe('extra-open');
-    expect(grid.AKs).toBe('missed-open');
+    expect(grid.AA).toBe('mixed');
+    expect(grid.AKs).toBe('mixed');
     expect(grid.KK).toBe('excluded');
     expect(grid.undefined).toBeUndefined();
+  });
+
+  it('marks hands with mixed comparable outcomes as mixed instead of hiding folds behind extra opens', () => {
+    const grid = buildCoinPokerGrid([
+      item('A3s', 'match-fold'),
+      item('A3s', 'extra-open'),
+    ]);
+
+    expect(grid.A3s).toBe('mixed');
   });
 });
 
