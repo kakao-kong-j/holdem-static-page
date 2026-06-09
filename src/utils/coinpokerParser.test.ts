@@ -128,6 +128,9 @@ describe('parseCoinPokerHands', () => {
       rfiEligible: true,
       exclusionReason: null,
     });
+    expect(hands[0].rawText).toContain('CoinPoker Hand #68315300002');
+    expect(hands[0].rawText).toContain('Hero: raises 700 to 800');
+    expect(hands[0].rawText).not.toContain('CoinPoker Hand #68315300003');
     expect(hands[0].preflopActions.map((action) => action.action)).toEqual([
       'folds',
       'folds',

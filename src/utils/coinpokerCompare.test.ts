@@ -23,6 +23,7 @@ const stackData: StackData = {
 function hand(overrides: Partial<CoinPokerHand>): CoinPokerHand {
   return {
     handId: '1',
+    rawText: 'CoinPoker Hand #1: NLH (50/100/13) 2026/06/08 12:00:00 KST',
     startedAt: '2026/06/08 12:00:00 KST',
     smallBlind: 50,
     bigBlind: 100,

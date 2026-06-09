@@ -9,6 +9,7 @@ export interface CoinPokerAction {
 
 export interface CoinPokerHand {
   handId: string;
+  rawText: string;
   startedAt: string;
   smallBlind: number;
   bigBlind: number;
@@ -112,6 +113,7 @@ function parseHandBlock(block: string): CoinPokerHand | null {
 
   return {
     handId: header[1],
+    rawText: block,
     startedAt: header[5],
     smallBlind,
     bigBlind,
