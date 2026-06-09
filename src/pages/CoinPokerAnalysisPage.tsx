@@ -22,6 +22,7 @@ export function CoinPokerAnalysisPage({ stack, stackData }: Props) {
   const [rawText, setRawText] = useState('');
   const [fileError, setFileError] = useState<string | null>(null);
   const [hoveredHand, setHoveredHand] = useState<string | null>(null);
+  const [pinnedHand, setPinnedHand] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const inputVersionRef = useRef(0);
 
@@ -31,7 +32,8 @@ export function CoinPokerAnalysisPage({ stack, stackData }: Props) {
   const comparisonGrid = useMemo(() => buildCoinPokerGrid(comparison), [comparison]);
   const comparisonByHand = useMemo(() => groupCoinPokerItemsByHand(comparison), [comparison]);
   const tableRows = useMemo(() => comparison.slice(0, TABLE_LIMIT), [comparison]);
-  const hoveredItems = hoveredHand ? comparisonByHand[hoveredHand] ?? [] : [];
+  const activeHand = pinnedHand ?? hoveredHand;
+  const activeItems = activeHand ? comparisonByHand[activeHand] ?? [] : [];
 
   const isEmpty = rawText.trim().length === 0;
   const hasUnparsedText = !isEmpty && parsedHands.length === 0;
@@ -60,6 +62,8 @@ export function CoinPokerAnalysisPage({ stack, stackData }: Props) {
     inputVersionRef.current += 1;
     setRawText('');
     setFileError(null);
+    setHoveredHand(null);
+    setPinnedHand(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -69,6 +73,13 @@ export function CoinPokerAnalysisPage({ stack, stackData }: Props) {
     inputVersionRef.current += 1;
     setRawText(event.target.value);
     setFileError(null);
+    setHoveredHand(null);
+    setPinnedHand(null);
+  };
+
+  const handleGridClick = (hand: string) => {
+    setPinnedHand(current => current === hand ? null : hand);
+    setHoveredHand(null);
   };
 
   const summaryItems = [
@@ -154,8 +165,9 @@ export function CoinPokerAnalysisPage({ stack, stackData }: Props) {
                     <RangeGrid
                       handAction={comparisonGrid}
                       colorMap={COINPOKER_COMPARE_COLORS}
-                      highlightedHand={hoveredHand}
+                      highlightedHand={activeHand}
                       onHoverHand={setHoveredHand}
+                      onClickHand={handleGridClick}
                     />
                   </div>
                 </div>
@@ -167,7 +179,7 @@ export function CoinPokerAnalysisPage({ stack, stackData }: Props) {
                     </span>
                   ))}
                 </div>
-                <HoverSelectionPanel hoveredHand={hoveredHand} items={hoveredItems} />
+                <HoverSelectionPanel activeHand={activeHand} pinnedHand={pinnedHand} items={activeItems} />
               </div>
 
               <div className="min-w-0 flex-1 overflow-hidden rounded-lg border border-gray-800 bg-gray-950/20">
@@ -245,16 +257,18 @@ function statusLabel(item: CoinPokerComparisonItem): string {
 }
 
 function HoverSelectionPanel({
-  hoveredHand,
+  activeHand,
+  pinnedHand,
   items,
 }: {
-  hoveredHand: string | null;
+  activeHand: string | null;
+  pinnedHand: string | null;
   items: CoinPokerComparisonItem[];
 }) {
-  if (!hoveredHand) {
+  if (!activeHand) {
     return (
       <div className="mt-3 rounded-md border border-gray-800 bg-gray-900/60 px-3 py-3 text-xs text-gray-500">
-        그리드의 핸드에 마우스를 올리면 Hero의 실제 선택들이 표시됩니다.
+        그리드의 핸드에 마우스를 올리면 Hero의 실제 선택들이 표시됩니다. 클릭하면 고정됩니다.
       </div>
     );
   }
@@ -262,8 +276,18 @@ function HoverSelectionPanel({
   return (
     <div className="mt-3 rounded-md border border-gray-800 bg-gray-900/60">
       <div className="flex items-center justify-between gap-2 border-b border-gray-800 px-3 py-2">
-        <div className="text-sm font-semibold text-white">{hoveredHand}</div>
-        <div className="text-xs text-gray-500">{items.length} hands</div>
+        <div className="flex items-center gap-2">
+          <div className="text-sm font-semibold text-white">{activeHand}</div>
+          {pinnedHand === activeHand && (
+            <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-200">
+              고정됨
+            </span>
+          )}
+        </div>
+        <div className="text-xs text-gray-500">
+          {items.length} hands
+          {pinnedHand === activeHand ? ' · 다시 클릭하면 해제' : ''}
+        </div>
       </div>
       {items.length === 0 ? (
         <div className="px-3 py-3 text-xs text-gray-500">
