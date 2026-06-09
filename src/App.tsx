@@ -106,7 +106,7 @@ function App() {
         ))}
       </div>
 
-      {view !== 'quiz' && view !== 'quiz-stats' && (
+      {view !== 'quiz' && view !== 'quiz-stats' && view !== 'coinpoker' && (
         <div className="flex justify-center mb-4">
           <StackTabs
             selected={stack}
@@ -121,7 +121,7 @@ function App() {
       {view === 'facing' && <FacingPage stackData={stackData} />}
       {view === 'quiz' && <QuizPage data={data} />}
       {view === 'quiz-stats' && <QuizStatsPage data={data} onNavigate={navigate} />}
-      {view === 'coinpoker' && <CoinPokerAnalysisPage stack={stack} stackData={stackData} />}
+      {view === 'coinpoker' && <CoinPokerAnalysisPage fallbackStack={stack} data={data} />}
     </div>
   );
 }

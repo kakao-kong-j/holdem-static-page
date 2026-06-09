@@ -1,4 +1,5 @@
-import type { ColorDef, StackData } from '../types';
+import { STACK_SIZES } from '../constants';
+import type { AllData, ColorDef, StackData, StackSize } from '../types';
 import type { CoinPokerHand } from './coinpokerParser';
 import { buildHandAction, forEachHand } from './hand';
 import { buildScenarioMap, getScenarios } from './scenarioMap';
@@ -8,6 +9,7 @@ export type CoinPokerGridStatus = CoinPokerCompareStatus | 'match' | 'mixed';
 
 export interface CoinPokerComparisonItem {
   hand: CoinPokerHand;
+  stackSize: StackSize;
   chartName: string | null;
   gtoAction: 'open' | 'fold' | 'unknown';
   heroDecision: 'open' | 'fold' | 'passive' | 'unknown';
@@ -42,7 +44,22 @@ export const COINPOKER_COMPARE_COLORS: Record<CoinPokerGridStatus, ColorDef> = {
   excluded: { bg: '#111827', text: '#6b7280', label: 'Excluded' },
 };
 
-export function compareCoinPokerRfi(hands: CoinPokerHand[], stackData: StackData): CoinPokerComparisonItem[] {
+export function compareCoinPokerAutoStack(
+  hands: CoinPokerHand[],
+  allData: AllData,
+  fallbackStack: StackSize = '100BB',
+): CoinPokerComparisonItem[] {
+  return hands.flatMap((hand) => {
+    const stackSize = selectCoinPokerStack(hand.heroStackBb, fallbackStack);
+    return compareCoinPokerRfi([hand], allData[stackSize], stackSize);
+  });
+}
+
+export function compareCoinPokerRfi(
+  hands: CoinPokerHand[],
+  stackData: StackData,
+  stackSize: StackSize = '100BB',
+): CoinPokerComparisonItem[] {
   const chartActionsByName = Object.fromEntries(
     Object.entries(stackData).map(([chartName, chart]) => [chartName, buildHandAction(chart)]),
   );
@@ -56,6 +73,7 @@ export function compareCoinPokerRfi(hands: CoinPokerHand[], stackData: StackData
     if (spot.exclusionReason) {
       return {
         hand,
+        stackSize,
         chartName,
         gtoAction: 'unknown',
         heroDecision,
@@ -68,6 +86,7 @@ export function compareCoinPokerRfi(hands: CoinPokerHand[], stackData: StackData
     if (!hand.heroHand || !chartActions) {
       return {
         hand,
+        stackSize,
         chartName,
         gtoAction: 'unknown',
         heroDecision,
@@ -82,6 +101,7 @@ export function compareCoinPokerRfi(hands: CoinPokerHand[], stackData: StackData
     if (spot.kind === 'rfi' && heroDecision === 'passive') {
       return {
         hand,
+        stackSize,
         chartName,
         gtoAction,
         heroDecision,
@@ -94,6 +114,7 @@ export function compareCoinPokerRfi(hands: CoinPokerHand[], stackData: StackData
 
     return {
       hand,
+      stackSize,
       chartName,
       gtoAction,
       heroDecision,
@@ -101,6 +122,21 @@ export function compareCoinPokerRfi(hands: CoinPokerHand[], stackData: StackData
       exclusionReason: null,
     };
   });
+}
+
+export function selectCoinPokerStack(heroStackBb: number | null, fallbackStack: StackSize = '100BB'): StackSize {
+  if (heroStackBb === null || !Number.isFinite(heroStackBb)) return fallbackStack;
+
+  return STACK_SIZES.reduce((best, candidate) => {
+    const bestDistance = Math.abs(parseStackBb(best) - heroStackBb);
+    const candidateDistance = Math.abs(parseStackBb(candidate) - heroStackBb);
+    if (candidateDistance < bestDistance) return candidate;
+    return best;
+  }, fallbackStack);
+}
+
+function parseStackBb(stack: StackSize): number {
+  return Number(stack.replace('BB', ''));
 }
 
 function findComparisonSpot(

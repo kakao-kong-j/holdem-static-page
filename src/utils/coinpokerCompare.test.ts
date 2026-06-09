@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import type { StackData } from '../types';
+import type { AllData, StackData } from '../types';
 import type { CoinPokerHand } from './coinpokerParser';
 import {
   buildCoinPokerGrid,
+  compareCoinPokerAutoStack,
   compareCoinPokerRfi,
   groupCoinPokerItemsByHand,
+  selectCoinPokerStack,
   summarizeCoinPokerComparison,
   type CoinPokerComparisonItem,
   type CoinPokerCompareStatus,
@@ -18,6 +20,13 @@ const stackData: StackData = {
   'LJ RFI': { raise: ['AQs'] },
   'SB RFI BvB': { limp: ['T5o'], raise: ['AA'] },
   'BTN vs CO RFI': { call: ['KQo'], threebet: ['AA'] },
+};
+
+const allData: AllData = {
+  '15BB': { 'BTN RFI': { allIn: ['AA'] } },
+  '25BB': { 'BTN RFI': { raise: ['KK'] } },
+  '40BB': { 'BTN RFI': { raise: ['QQ'] } },
+  '100BB': { 'BTN RFI': { raise: ['JJ'] } },
 };
 
 function hand(overrides: Partial<CoinPokerHand>): CoinPokerHand {
@@ -47,6 +56,7 @@ function hand(overrides: Partial<CoinPokerHand>): CoinPokerHand {
 function item(heroHand: string | null, status: CoinPokerCompareStatus): CoinPokerComparisonItem {
   return {
     hand: hand({ heroHand }),
+    stackSize: '100BB',
     chartName: 'BTN RFI',
     gtoAction: 'unknown',
     heroDecision: 'unknown',
@@ -187,6 +197,36 @@ describe('compareCoinPokerRfi', () => {
       heroDecision: 'passive',
       exclusionReason: null,
     });
+  });
+});
+
+describe('selectCoinPokerStack', () => {
+  it('selects the closest available chart stack from Hero stack BB', () => {
+    expect(selectCoinPokerStack(18)).toBe('15BB');
+    expect(selectCoinPokerStack(27)).toBe('25BB');
+    expect(selectCoinPokerStack(38)).toBe('40BB');
+    expect(selectCoinPokerStack(80)).toBe('100BB');
+  });
+
+  it('uses the fallback stack when Hero stack BB is unavailable', () => {
+    expect(selectCoinPokerStack(null, '40BB')).toBe('40BB');
+  });
+});
+
+describe('compareCoinPokerAutoStack', () => {
+  it('compares each hand against the closest Hero stack chart', () => {
+    const items = compareCoinPokerAutoStack(
+      [
+        hand({ handId: 'near-25', heroHand: 'KK', heroStackBb: 27, heroFirstAction: 'raises' }),
+        hand({ handId: 'near-100', heroHand: 'JJ', heroStackBb: 80, heroFirstAction: 'raises' }),
+      ],
+      allData,
+    );
+
+    expect(items).toMatchObject([
+      { stackSize: '25BB', chartName: 'BTN RFI', status: 'match-open' },
+      { stackSize: '100BB', chartName: 'BTN RFI', status: 'match-open' },
+    ]);
   });
 });
 

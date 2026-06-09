@@ -3,17 +3,17 @@ import { RangeGrid } from '../components/RangeGrid';
 import {
   COINPOKER_COMPARE_COLORS,
   buildCoinPokerGrid,
-  compareCoinPokerRfi,
+  compareCoinPokerAutoStack,
   groupCoinPokerItemsByHand,
   summarizeCoinPokerComparison,
   type CoinPokerComparisonItem,
 } from '../utils/coinpokerCompare';
 import { parseCoinPokerHands } from '../utils/coinpokerParser';
-import type { StackData, StackSize } from '../types';
+import type { AllData, StackSize } from '../types';
 
 interface Props {
-  stack: StackSize;
-  stackData: StackData;
+  fallbackStack: StackSize;
+  data: AllData;
 }
 
 const TABLE_LIMIT = 250;
@@ -26,7 +26,7 @@ interface MistakeHandSummary {
   extraOpenCount: number;
 }
 
-export function CoinPokerAnalysisPage({ stack, stackData }: Props) {
+export function CoinPokerAnalysisPage({ fallbackStack, data }: Props) {
   const [rawText, setRawText] = useState('');
   const [fileError, setFileError] = useState<string | null>(null);
   const [hoveredHand, setHoveredHand] = useState<string | null>(null);
@@ -36,7 +36,7 @@ export function CoinPokerAnalysisPage({ stack, stackData }: Props) {
   const inputVersionRef = useRef(0);
 
   const parsedHands = useMemo(() => parseCoinPokerHands(rawText), [rawText]);
-  const comparison = useMemo(() => compareCoinPokerRfi(parsedHands, stackData), [parsedHands, stackData]);
+  const comparison = useMemo(() => compareCoinPokerAutoStack(parsedHands, data, fallbackStack), [parsedHands, data, fallbackStack]);
   const summary = useMemo(() => summarizeCoinPokerComparison(comparison), [comparison]);
   const comparisonGrid = useMemo(() => buildCoinPokerGrid(comparison), [comparison]);
   const comparisonByHand = useMemo(() => groupCoinPokerItemsByHand(comparison), [comparison]);
@@ -114,7 +114,7 @@ export function CoinPokerAnalysisPage({ stack, stackData }: Props) {
             <div>
               <h2 className="text-lg sm:text-xl font-bold text-white">CoinPoker RFI 분석</h2>
               <p className="mt-1 text-xs text-gray-500">
-                {stack} 차트 기준으로 Hero 프리플랍 로그를 비교합니다
+                Hero 스택에 가장 가까운 15BB/25BB/40BB/100BB 차트로 자동 비교합니다
               </p>
             </div>
 
@@ -270,7 +270,7 @@ export function CoinPokerAnalysisPage({ stack, stackData }: Props) {
                                 </span>
                               </td>
                               <td className="whitespace-nowrap px-3 py-2 text-gray-500">{item.exclusionReason ?? '-'}</td>
-                              <td className="whitespace-nowrap px-3 py-2 text-gray-400">{formatStack(item, stack)}</td>
+                              <td className="whitespace-nowrap px-3 py-2 text-gray-400">{formatStack(item)}</td>
                             </tr>
                           );
                         })
@@ -445,7 +445,7 @@ function HoverSelectionPanel({
                     </span>
                   </div>
                   <div className="mt-0.5 truncate text-gray-500">
-                    {item.hand.heroPosition} · {item.chartName ?? item.exclusionReason ?? '-'}
+                    {item.hand.heroPosition} · {item.stackSize} · {item.chartName ?? item.exclusionReason ?? '-'}
                   </div>
                 </div>
                 <div className="text-right">
@@ -502,7 +502,7 @@ function HandHistoryModal({ item, onClose }: { item: CoinPokerComparisonItem; on
               Hand #{item.hand.handId}
             </div>
             <div className="mt-1 truncate text-xs text-gray-500">
-              {formatCards(item)} · {item.hand.heroPosition} · {statusLabel(item)}
+              {formatCards(item)} · {item.hand.heroPosition} · {item.stackSize} · {statusLabel(item)}
             </div>
           </div>
           <button
@@ -539,7 +539,7 @@ function formatCards(item: CoinPokerComparisonItem): string {
   return item.hand.heroHand ? `${item.hand.heroHand} (${rawCards})` : rawCards;
 }
 
-function formatStack(item: CoinPokerComparisonItem, fallbackStack: StackSize): string {
-  if (item.hand.heroStackBb === null) return fallbackStack;
-  return `${item.hand.heroStackBb.toFixed(2)}BB`;
+function formatStack(item: CoinPokerComparisonItem): string {
+  if (item.hand.heroStackBb === null) return item.stackSize;
+  return `${item.hand.heroStackBb.toFixed(2)}BB -> ${item.stackSize}`;
 }
