@@ -17,6 +17,14 @@ interface Props {
 }
 
 const TABLE_LIMIT = 250;
+const TOP_MISTAKE_HAND_LIMIT = 12;
+
+interface MistakeHandSummary {
+  hand: string;
+  count: number;
+  missedOpenCount: number;
+  extraOpenCount: number;
+}
 
 export function CoinPokerAnalysisPage({ stack, stackData }: Props) {
   const [rawText, setRawText] = useState('');
@@ -33,6 +41,7 @@ export function CoinPokerAnalysisPage({ stack, stackData }: Props) {
   const comparisonGrid = useMemo(() => buildCoinPokerGrid(comparison), [comparison]);
   const comparisonByHand = useMemo(() => groupCoinPokerItemsByHand(comparison), [comparison]);
   const tableRows = useMemo(() => comparison.slice(0, TABLE_LIMIT), [comparison]);
+  const topMistakeHands = useMemo(() => buildTopMistakeHands(comparison), [comparison]);
   const activeHand = pinnedHand ?? hoveredHand;
   const activeItems = useMemo(() => {
     const items = activeHand ? comparisonByHand[activeHand] ?? [] : [];
@@ -189,7 +198,12 @@ export function CoinPokerAnalysisPage({ stack, stackData }: Props) {
                   activeHand={activeHand}
                   pinnedHand={pinnedHand}
                   items={activeItems}
+                  topMistakeHands={topMistakeHands}
                   onOpenHandHistory={setSelectedHandHistory}
+                  onPinHand={(hand) => {
+                    setPinnedHand(hand);
+                    setHoveredHand(null);
+                  }}
                 />
               </div>
 
@@ -331,16 +345,51 @@ function sortPinnedSelectionItems(items: CoinPokerComparisonItem[]): CoinPokerCo
     .map(({ item }) => item);
 }
 
+function buildTopMistakeHands(items: CoinPokerComparisonItem[]): MistakeHandSummary[] {
+  const summaryByHand: Record<string, MistakeHandSummary> = {};
+
+  for (const item of items) {
+    const hand = item.hand.heroHand;
+    if (!hand || outcomeTone(item) !== 'incorrect') continue;
+
+    const summary = summaryByHand[hand] ?? {
+      hand,
+      count: 0,
+      missedOpenCount: 0,
+      extraOpenCount: 0,
+    };
+
+    summary.count += 1;
+    if (item.status === 'missed-open') summary.missedOpenCount += 1;
+    if (item.status === 'extra-open') summary.extraOpenCount += 1;
+    summaryByHand[hand] = summary;
+  }
+
+  return Object.values(summaryByHand)
+    .sort((left, right) => {
+      if (right.count !== left.count) return right.count - left.count;
+      const leftSevere = left.extraOpenCount + left.missedOpenCount;
+      const rightSevere = right.extraOpenCount + right.missedOpenCount;
+      if (rightSevere !== leftSevere) return rightSevere - leftSevere;
+      return left.hand.localeCompare(right.hand);
+    })
+    .slice(0, TOP_MISTAKE_HAND_LIMIT);
+}
+
 function HoverSelectionPanel({
   activeHand,
   pinnedHand,
   items,
+  topMistakeHands,
   onOpenHandHistory,
+  onPinHand,
 }: {
   activeHand: string | null;
   pinnedHand: string | null;
   items: CoinPokerComparisonItem[];
+  topMistakeHands: MistakeHandSummary[];
   onOpenHandHistory: (item: CoinPokerComparisonItem) => void;
+  onPinHand: (hand: string) => void;
 }) {
   if (!activeHand) {
     return (
@@ -411,6 +460,32 @@ function HoverSelectionPanel({
               외 {items.length - 12}개 더 있음
             </div>
           )}
+        </div>
+      )}
+      {pinnedHand && topMistakeHands.length > 0 && (
+        <div className="border-t border-gray-800 px-3 py-3">
+          <div className="mb-2 text-xs font-semibold text-gray-300">자주 틀린 핸드</div>
+          <div className="flex flex-wrap gap-1.5">
+            {topMistakeHands.map((summary) => {
+              const isActive = summary.hand === pinnedHand;
+              return (
+                <button
+                  key={summary.hand}
+                  type="button"
+                  onClick={() => onPinHand(summary.hand)}
+                  className={`inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-semibold transition-colors ${
+                    isActive
+                      ? 'bg-amber-500/25 text-amber-100 ring-1 ring-amber-400/40'
+                      : 'bg-red-500/15 text-red-100 hover:bg-red-500/25'
+                  }`}
+                  title={`오버 폴드 ${summary.missedOpenCount} / 루즈 오픈 ${summary.extraOpenCount}`}
+                >
+                  <span>{summary.hand}</span>
+                  <span className="text-red-200/80">{summary.count}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
     </div>
