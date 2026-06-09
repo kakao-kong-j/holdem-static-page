@@ -25,3 +25,4 @@ public/gto-preflop-charts-all.json
 *.njsproj
 *.sln
 *.sw?
+.gstack/

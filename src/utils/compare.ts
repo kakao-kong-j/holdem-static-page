@@ -1,6 +1,6 @@
 import type { QuizRecord, StackSize, ColorDef } from '../types';
 import { ACTION_COLORS, OPEN_RANGE_COLOR_MAP, OPEN_RANGE_POSITIONS } from '../constants';
-import { forEachHand } from './hand';
+import { forEachHand, getHandCombos } from './hand';
 
 export const UNANSWERED_ACTION = 'unanswered';
 export const DIMMED_ACTION = 'dimmed';
@@ -60,6 +60,56 @@ export function computeAnswerBorders(
     borders[hand] = l === r ? CORRECT_BORDER : WRONG_BORDER;
   });
   return borders;
+}
+
+export function computeRecordBorders(
+  rightRecords: Record<string, QuizRecord>,
+  displayedRight: Record<string, string>,
+): Record<string, string> {
+  const borders: Record<string, string> = {};
+  forEachHand(hand => {
+    const r = displayedRight[hand] ?? UNANSWERED_ACTION;
+    if (r === UNANSWERED_ACTION || r === DIMMED_ACTION) return;
+    const rec = rightRecords[hand];
+    if (!rec) return;
+    borders[hand] = rec.correct ? CORRECT_BORDER : WRONG_BORDER;
+  });
+  return borders;
+}
+
+export function latestRecordsByHand(
+  records: QuizRecord[],
+  predicate: (r: QuizRecord) => boolean,
+): Record<string, QuizRecord> {
+  const latest: Record<string, QuizRecord> = {};
+  for (const r of records) {
+    if (!predicate(r)) continue;
+    const h = r.question.hand;
+    if (!latest[h] || r.timestamp > latest[h].timestamp) {
+      latest[h] = r;
+    }
+  }
+  return latest;
+}
+
+export function buildAnswerTitle(r: QuizRecord): string {
+  const { question, userAnswer } = r;
+  const { hand, stackSize, chartName, heroPosition, villainPosition } = question;
+  const combos = getHandCombos(hand);
+  const posLine = villainPosition
+    ? `나: ${heroPosition} vs 빌런: ${villainPosition}`
+    : `나: ${heroPosition}`;
+  return `${hand} (${combos} combos)\n${stackSize} · ${chartName}\n${posLine}\n내 답변: ${userAnswer}`;
+}
+
+export function buildAnswerTitles(
+  latestByHand: Record<string, QuizRecord>,
+): Record<string, string> {
+  const titles: Record<string, string> = {};
+  for (const [hand, rec] of Object.entries(latestByHand)) {
+    titles[hand] = buildAnswerTitle(rec);
+  }
+  return titles;
 }
 
 export function latestUserAnswersByHand(
@@ -142,5 +192,19 @@ export function compareSummary(
     if (l === r) matched++;
     else mismatched++;
   });
+  return { answered, matched, mismatched, total: 169 };
+}
+
+export function recordSummary(
+  rightRecords: Record<string, QuizRecord>,
+): CompareSummary {
+  let answered = 0;
+  let matched = 0;
+  let mismatched = 0;
+  for (const rec of Object.values(rightRecords)) {
+    answered++;
+    if (rec.correct) matched++;
+    else mismatched++;
+  }
   return { answered, matched, mismatched, total: 169 };
 }
