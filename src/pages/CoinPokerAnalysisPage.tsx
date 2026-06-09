@@ -164,8 +164,8 @@ export function CoinPokerAnalysisPage({ stack, stackData }: Props) {
               ))}
             </div>
 
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-              <div className="min-w-0 flex-1 rounded-lg border border-gray-800 bg-gray-950/20 p-3">
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(720px,1fr)_minmax(320px,420px)] xl:items-start">
+              <div className="min-w-0 rounded-lg border border-gray-800 bg-gray-950/20 p-3">
                 <div className="overflow-x-auto">
                   <div className="min-w-max text-center">
                     <RangeGrid
@@ -193,7 +193,7 @@ export function CoinPokerAnalysisPage({ stack, stackData }: Props) {
                 />
               </div>
 
-              <div className="min-w-0 flex-1 overflow-hidden rounded-lg border border-gray-800 bg-gray-950/20">
+              <div className="min-w-0 overflow-hidden rounded-lg border border-gray-800 bg-gray-950/20">
                 <div className="flex items-center justify-between gap-3 border-b border-gray-800 px-3 py-2">
                   <h3 className="text-sm font-semibold text-gray-200">비교 결과</h3>
                   <span className="text-xs text-gray-500">
@@ -203,7 +203,7 @@ export function CoinPokerAnalysisPage({ stack, stackData }: Props) {
                 </div>
 
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[880px] text-left text-xs">
+                  <table className="w-full min-w-[720px] text-left text-xs">
                     <thead className="bg-gray-900/80 text-[11px] uppercase text-gray-500">
                       <tr>
                         <th className="px-3 py-2 font-semibold">Hand</th>
