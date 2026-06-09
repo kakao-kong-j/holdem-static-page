@@ -36,7 +36,7 @@ export const COINPOKER_COMPARE_COLORS: Record<CoinPokerGridStatus, ColorDef> = {
   match: { bg: '#059669', text: '#ecfdf5', label: 'Correct' },
   'match-open': { bg: '#059669', text: '#ecfdf5', label: 'Open match' },
   'match-fold': { bg: '#475569', text: '#f8fafc', label: 'Fold match' },
-  'missed-open': { bg: '#f59e0b', text: '#111827', label: 'Missed open' },
+  'missed-open': { bg: '#f59e0b', text: '#111827', label: 'Over fold' },
   'extra-open': { bg: '#dc2626', text: '#fef2f2', label: 'Extra open' },
   mixed: { bg: '#7c3aed', text: '#f5f3ff', label: 'Mixed' },
   excluded: { bg: '#111827', text: '#6b7280', label: 'Excluded' },
