@@ -33,7 +33,10 @@ export function CoinPokerAnalysisPage({ stack, stackData }: Props) {
   const comparisonByHand = useMemo(() => groupCoinPokerItemsByHand(comparison), [comparison]);
   const tableRows = useMemo(() => comparison.slice(0, TABLE_LIMIT), [comparison]);
   const activeHand = pinnedHand ?? hoveredHand;
-  const activeItems = activeHand ? comparisonByHand[activeHand] ?? [] : [];
+  const activeItems = useMemo(() => {
+    const items = activeHand ? comparisonByHand[activeHand] ?? [] : [];
+    return pinnedHand === activeHand ? sortPinnedSelectionItems(items) : items;
+  }, [activeHand, comparisonByHand, pinnedHand]);
 
   const isEmpty = rawText.trim().length === 0;
   const hasUnparsedText = !isEmpty && parsedHands.length === 0;
@@ -213,28 +216,31 @@ export function CoinPokerAnalysisPage({ stack, stackData }: Props) {
                           </td>
                         </tr>
                       ) : (
-                        tableRows.map((item) => (
-                          <tr key={item.hand.handId} className="text-gray-300 hover:bg-gray-900/50">
-                            <td className="whitespace-nowrap px-3 py-2 font-mono text-gray-200">{item.hand.handId}</td>
-                            <td className="whitespace-nowrap px-3 py-2">{item.hand.heroPosition}</td>
-                            <td className="whitespace-nowrap px-3 py-2 font-mono">{formatCards(item)}</td>
-                            <td className="whitespace-nowrap px-3 py-2">{heroDecisionLabel(item.heroDecision)}</td>
-                            <td className="whitespace-nowrap px-3 py-2">{gtoActionLabel(item.gtoAction)}</td>
-                            <td className="px-3 py-2">
-                              <span
-                                className="inline-flex max-w-48 items-center rounded px-2 py-0.5 text-[11px] font-semibold"
-                                style={{
-                                  backgroundColor: COINPOKER_COMPARE_COLORS[item.status].bg,
-                                  color: COINPOKER_COMPARE_COLORS[item.status].text,
-                                }}
-                              >
-                                {statusLabel(item)}
-                              </span>
-                            </td>
-                            <td className="whitespace-nowrap px-3 py-2 text-gray-500">{item.exclusionReason ?? '-'}</td>
-                            <td className="whitespace-nowrap px-3 py-2 text-gray-400">{formatStack(item, stack)}</td>
-                          </tr>
-                        ))
+                        tableRows.map((item) => {
+                          const outcome = outcomeTone(item);
+                          return (
+                            <tr key={item.hand.handId} className={`${OUTCOME_STYLES[outcome].tableRow} text-gray-300`}>
+                              <td className="whitespace-nowrap px-3 py-2 font-mono text-gray-200">{item.hand.handId}</td>
+                              <td className="whitespace-nowrap px-3 py-2">{item.hand.heroPosition}</td>
+                              <td className="whitespace-nowrap px-3 py-2 font-mono">{formatCards(item)}</td>
+                              <td className="whitespace-nowrap px-3 py-2">{heroDecisionLabel(item.heroDecision)}</td>
+                              <td className="whitespace-nowrap px-3 py-2">{gtoActionLabel(item.gtoAction)}</td>
+                              <td className="px-3 py-2">
+                                <span
+                                  className="inline-flex max-w-48 items-center rounded px-2 py-0.5 text-[11px] font-semibold"
+                                  style={{
+                                    backgroundColor: COINPOKER_COMPARE_COLORS[item.status].bg,
+                                    color: COINPOKER_COMPARE_COLORS[item.status].text,
+                                  }}
+                                >
+                                  {statusLabel(item)}
+                                </span>
+                              </td>
+                              <td className="whitespace-nowrap px-3 py-2 text-gray-500">{item.exclusionReason ?? '-'}</td>
+                              <td className="whitespace-nowrap px-3 py-2 text-gray-400">{formatStack(item, stack)}</td>
+                            </tr>
+                          );
+                        })
                       )}
                     </tbody>
                   </table>
@@ -254,6 +260,53 @@ function statusLabel(item: CoinPokerComparisonItem): string {
   if (item.status === 'missed-open') return '오버 폴드';
   if (item.status === 'extra-open') return '루즈 오픈';
   return item.exclusionReason ?? '제외';
+}
+
+type OutcomeTone = 'correct' | 'incorrect' | 'unknown';
+
+const OUTCOME_STYLES: Record<OutcomeTone, { tableRow: string; panelRow: string; badge: string; label: string }> = {
+  incorrect: {
+    tableRow: 'bg-red-950/20 hover:bg-red-950/35',
+    panelRow: 'bg-red-950/20',
+    badge: 'bg-red-500/15 text-red-200 ring-1 ring-red-500/30',
+    label: '오답',
+  },
+  correct: {
+    tableRow: 'bg-emerald-950/15 hover:bg-emerald-950/30',
+    panelRow: 'bg-emerald-950/15',
+    badge: 'bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-500/30',
+    label: '정답',
+  },
+  unknown: {
+    tableRow: 'bg-gray-950/30 hover:bg-gray-900/50',
+    panelRow: 'bg-gray-950/30',
+    badge: 'bg-gray-700/50 text-gray-300 ring-1 ring-gray-600/50',
+    label: '알수없음',
+  },
+};
+
+const PINNED_OUTCOME_ORDER: Record<OutcomeTone, number> = {
+  incorrect: 0,
+  unknown: 1,
+  correct: 2,
+};
+
+function outcomeTone(item: CoinPokerComparisonItem): OutcomeTone {
+  if (item.status === 'excluded' || item.gtoAction === 'unknown') return 'unknown';
+  if (item.status === 'match-open' || item.status === 'match-fold') return 'correct';
+  return 'incorrect';
+}
+
+function sortPinnedSelectionItems(items: CoinPokerComparisonItem[]): CoinPokerComparisonItem[] {
+  return items
+    .map((item, index) => ({ item, index }))
+    .sort((left, right) => {
+      const leftOrder = PINNED_OUTCOME_ORDER[outcomeTone(left.item)];
+      const rightOrder = PINNED_OUTCOME_ORDER[outcomeTone(right.item)];
+      if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+      return left.index - right.index;
+    })
+    .map(({ item }) => item);
 }
 
 function HoverSelectionPanel({
@@ -295,23 +348,31 @@ function HoverSelectionPanel({
         </div>
       ) : (
         <div className="max-h-48 overflow-y-auto">
-          {items.slice(0, 12).map((item) => (
-            <div
-              key={`${item.hand.handId}-${item.chartName ?? 'none'}`}
-              className="grid grid-cols-[minmax(72px,1fr)_auto] gap-2 border-b border-gray-800/70 px-3 py-2 text-xs last:border-b-0"
-            >
-              <div className="min-w-0">
-                <div className="truncate font-mono text-gray-300">{item.hand.handId}</div>
-                <div className="mt-0.5 truncate text-gray-500">
-                  {item.hand.heroPosition} · {item.chartName ?? item.exclusionReason ?? '-'}
+          {items.slice(0, 12).map((item) => {
+            const outcome = outcomeTone(item);
+            return (
+              <div
+                key={`${item.hand.handId}-${item.chartName ?? 'none'}`}
+                className={`grid grid-cols-[minmax(72px,1fr)_auto] gap-2 border-b border-gray-800/70 px-3 py-2 text-xs last:border-b-0 ${OUTCOME_STYLES[outcome].panelRow}`}
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="truncate font-mono text-gray-300">{item.hand.handId}</span>
+                    <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${OUTCOME_STYLES[outcome].badge}`}>
+                      {OUTCOME_STYLES[outcome].label}
+                    </span>
+                  </div>
+                  <div className="mt-0.5 truncate text-gray-500">
+                    {item.hand.heroPosition} · {item.chartName ?? item.exclusionReason ?? '-'}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="text-gray-200">{heroDecisionLabel(item.heroDecision)}</div>
+                  <div className="mt-0.5 text-gray-500">{gtoActionLabel(item.gtoAction)} · {statusLabel(item)}</div>
                 </div>
               </div>
-              <div className="text-right">
-                <div className="text-gray-200">{heroDecisionLabel(item.heroDecision)}</div>
-                <div className="mt-0.5 text-gray-500">{gtoActionLabel(item.gtoAction)} · {statusLabel(item)}</div>
-              </div>
-            </div>
-          ))}
+            );
+          })}
           {items.length > 12 && (
             <div className="px-3 py-2 text-xs text-gray-500">
               외 {items.length - 12}개 더 있음
