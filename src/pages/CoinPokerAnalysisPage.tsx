@@ -294,23 +294,26 @@ function statusLabel(item: CoinPokerComparisonItem): string {
 
 type OutcomeTone = 'correct' | 'incorrect' | 'unknown';
 
-const OUTCOME_STYLES: Record<OutcomeTone, { tableRow: string; panelRow: string; badge: string; label: string }> = {
+const OUTCOME_STYLES: Record<OutcomeTone, { tableRow: string; panelRow: string; badge: string; text: string; label: string }> = {
   incorrect: {
     tableRow: 'bg-red-950/20 hover:bg-red-950/35',
     panelRow: 'bg-red-950/20',
     badge: 'bg-red-500/15 text-red-200 ring-1 ring-red-500/30',
+    text: 'text-red-200',
     label: '오답',
   },
   correct: {
     tableRow: 'bg-emerald-950/15 hover:bg-emerald-950/30',
     panelRow: 'bg-emerald-950/15',
     badge: 'bg-emerald-500/15 text-emerald-200 ring-1 ring-emerald-500/30',
+    text: 'text-emerald-200',
     label: '정답',
   },
   unknown: {
     tableRow: 'bg-gray-950/30 hover:bg-gray-900/50',
     panelRow: 'bg-gray-950/30',
     badge: 'bg-gray-700/50 text-gray-300 ring-1 ring-gray-600/50',
+    text: 'text-gray-300',
     label: '알수없음',
   },
 };
@@ -508,6 +511,9 @@ function HoverSelectionPanel({
 }
 
 function HandHistoryModal({ item, onClose }: { item: CoinPokerComparisonItem; onClose: () => void }) {
+  const parsedDetails = parseHandHistoryDisplay(item);
+  const outcome = outcomeTone(item);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-3 py-6">
       <div className="flex max-h-full w-full max-w-4xl flex-col overflow-hidden rounded-lg border border-gray-700 bg-gray-950 shadow-2xl">
@@ -528,12 +534,154 @@ function HandHistoryModal({ item, onClose }: { item: CoinPokerComparisonItem; on
             닫기
           </button>
         </div>
-        <pre className="max-h-[75vh] overflow-auto whitespace-pre-wrap break-words p-4 font-mono text-xs leading-relaxed text-gray-200">
-          {item.hand.rawText}
-        </pre>
+        <div className="max-h-[75vh] overflow-auto p-4">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <InfoTile label="Hero" value={`${formatCards(item)} / ${item.hand.heroPosition}`} />
+            <InfoTile label="Stack" value={formatStack(item)} />
+            <InfoTile label="Chart" value={item.chartName ?? item.exclusionReason ?? '-'} />
+            <InfoTile
+              label="Result"
+              value={statusLabel(item)}
+              valueClassName={OUTCOME_STYLES[outcome].text}
+            />
+          </div>
+
+          <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_280px]">
+            <section className="rounded-md border border-gray-800 bg-gray-900/40">
+              <div className="border-b border-gray-800 px-3 py-2 text-xs font-semibold text-gray-300">
+                Preflop action
+              </div>
+              {item.hand.preflopActions.length === 0 ? (
+                <div className="px-3 py-3 text-xs text-gray-500">프리플랍 액션을 찾지 못했습니다.</div>
+              ) : (
+                <div className="divide-y divide-gray-800/70">
+                  {item.hand.preflopActions.map((action, index) => {
+                    const isHero = action.player === 'Hero';
+                    return (
+                      <div
+                        key={`${action.player}-${index}-${action.line}`}
+                        className={`grid grid-cols-[34px_64px_1fr] gap-2 px-3 py-2 text-xs ${
+                          isHero ? 'bg-indigo-500/10' : ''
+                        }`}
+                      >
+                        <div className="text-gray-500">#{index + 1}</div>
+                        <div className={isHero ? 'font-semibold text-indigo-200' : 'text-gray-400'}>
+                          {action.position ?? '-'}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className={isHero ? 'font-semibold text-white' : 'text-gray-200'}>{action.player}</span>
+                            <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${actionBadgeClass(action.action)}`}>
+                              {actionLabel(action.action)}
+                            </span>
+                          </div>
+                          <div className="mt-0.5 break-words font-mono text-[11px] text-gray-500">{action.line}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+
+            <aside className="space-y-3">
+              <section className="rounded-md border border-gray-800 bg-gray-900/40">
+                <div className="border-b border-gray-800 px-3 py-2 text-xs font-semibold text-gray-300">
+                  Board
+                </div>
+                {parsedDetails.board.length === 0 ? (
+                  <div className="px-3 py-3 text-xs text-gray-500">보드 없음</div>
+                ) : (
+                  <div className="space-y-2 px-3 py-3">
+                    {parsedDetails.board.map((street) => (
+                      <div key={street.street} className="flex items-center justify-between gap-2 text-xs">
+                        <span className="text-gray-500">{street.street}</span>
+                        <span className="font-mono text-gray-200">{street.cards.join(' ')}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              <section className="rounded-md border border-gray-800 bg-gray-900/40">
+                <div className="border-b border-gray-800 px-3 py-2 text-xs font-semibold text-gray-300">
+                  Summary
+                </div>
+                {parsedDetails.summary.length === 0 ? (
+                  <div className="px-3 py-3 text-xs text-gray-500">요약 없음</div>
+                ) : (
+                  <div className="max-h-44 overflow-auto px-3 py-3 font-mono text-[11px] leading-relaxed text-gray-400">
+                    {parsedDetails.summary.map((line) => (
+                      <div key={line}>{line}</div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </aside>
+          </div>
+
+          <details className="mt-4 rounded-md border border-gray-800 bg-gray-900/40">
+            <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-gray-300">
+              Raw hand history
+            </summary>
+            <pre className="max-h-72 overflow-auto whitespace-pre-wrap break-words border-t border-gray-800 p-3 font-mono text-xs leading-relaxed text-gray-300">
+              {item.hand.rawText}
+            </pre>
+          </details>
+        </div>
       </div>
     </div>
   );
+}
+
+function InfoTile({ label, value, valueClassName = 'text-white' }: { label: string; value: string; valueClassName?: string }) {
+  return (
+    <div className="rounded-md border border-gray-800 bg-gray-900/50 px-3 py-2">
+      <div className="text-[10px] font-semibold uppercase text-gray-500">{label}</div>
+      <div className={`mt-1 truncate text-xs font-semibold ${valueClassName}`}>{value}</div>
+    </div>
+  );
+}
+
+function parseHandHistoryDisplay(item: CoinPokerComparisonItem): {
+  board: Array<{ street: string; cards: string[] }>;
+  summary: string[];
+} {
+  const lines = item.hand.rawText.split(/\r?\n/);
+  const board = lines.flatMap((line) => {
+    const match = line.match(/^\*\*\* (FLOP|TURN|RIVER) \*\*\* \[([^\]]*)\](?: \[([^\]]*)\])?/);
+    if (!match) return [];
+    const cards = `${match[2]} ${match[3] ?? ''}`.trim().split(/\s+/).filter(Boolean);
+    return [{ street: match[1], cards }];
+  });
+
+  const summaryIndex = lines.findIndex((line) => line.trim() === '*** SUMMARY ***');
+  const summary = summaryIndex === -1
+    ? []
+    : lines.slice(summaryIndex + 1)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0)
+        .slice(0, 12);
+
+  return { board, summary };
+}
+
+function actionLabel(action: string): string {
+  if (action === 'folds') return 'Fold';
+  if (action === 'calls') return 'Call';
+  if (action === 'checks') return 'Check';
+  if (action === 'raises') return 'Raise';
+  if (action === 'bets') return 'Bet';
+  if (action === 'ALLIN') return 'All-in';
+  return action;
+}
+
+function actionBadgeClass(action: string): string {
+  if (action === 'folds') return 'bg-gray-700/70 text-gray-300';
+  if (action === 'calls' || action === 'checks') return 'bg-emerald-500/15 text-emerald-200';
+  if (action === 'raises' || action === 'bets') return 'bg-red-500/15 text-red-200';
+  if (action === 'ALLIN') return 'bg-purple-500/20 text-purple-200';
+  return 'bg-gray-700/70 text-gray-300';
 }
 
 function heroDecisionLabel(decision: CoinPokerComparisonItem['heroDecision']): string {
