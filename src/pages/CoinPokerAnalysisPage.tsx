@@ -39,6 +39,7 @@ export function CoinPokerAnalysisPage({ fallbackStack, data }: Props) {
   const comparison = useMemo(() => compareCoinPokerAutoStack(parsedHands, data, fallbackStack), [parsedHands, data, fallbackStack]);
   const summary = useMemo(() => summarizeCoinPokerComparison(comparison), [comparison]);
   const comparisonGrid = useMemo(() => buildCoinPokerGrid(comparison), [comparison]);
+  const gridMistakeLabels = useMemo(() => buildGridMistakeLabels(comparison), [comparison]);
   const comparisonByHand = useMemo(() => groupCoinPokerItemsByHand(comparison), [comparison]);
   const tableRows = useMemo(() => comparison.slice(0, TABLE_LIMIT), [comparison]);
   const topMistakeHands = useMemo(() => buildTopMistakeHands(comparison), [comparison]);
@@ -181,18 +182,11 @@ export function CoinPokerAnalysisPage({ fallbackStack, data }: Props) {
                       handAction={comparisonGrid}
                       colorMap={COINPOKER_COMPARE_COLORS}
                       highlightedHand={activeHand}
+                      labelByHand={gridMistakeLabels}
                       onHoverHand={setHoveredHand}
                       onClickHand={handleGridClick}
                     />
                   </div>
-                </div>
-                <div className="mt-3 flex flex-wrap justify-center gap-x-3 gap-y-1 text-xs text-gray-400">
-                  {Object.entries(COINPOKER_COMPARE_COLORS).map(([status, color]) => (
-                    <span key={status} className="inline-flex items-center gap-1.5">
-                      <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: color.bg }} />
-                      {color.label}
-                    </span>
-                  ))}
                 </div>
                 <HoverSelectionPanel
                   activeHand={activeHand}
@@ -374,6 +368,27 @@ function buildTopMistakeHands(items: CoinPokerComparisonItem[]): MistakeHandSumm
       return left.hand.localeCompare(right.hand);
     })
     .slice(0, TOP_MISTAKE_HAND_LIMIT);
+}
+
+function buildGridMistakeLabels(items: CoinPokerComparisonItem[]): Record<string, string> {
+  const countsByHand: Record<string, { total: number; mistakes: number }> = {};
+
+  for (const item of items) {
+    const hand = item.hand.heroHand;
+    if (!hand) continue;
+
+    const counts = countsByHand[hand] ?? { total: 0, mistakes: 0 };
+    counts.total += 1;
+    if (outcomeTone(item) === 'incorrect') counts.mistakes += 1;
+    countsByHand[hand] = counts;
+  }
+
+  return Object.fromEntries(
+    Object.entries(countsByHand).map(([hand, counts]) => [
+      hand,
+      `${Math.round((counts.mistakes / counts.total) * 100)}%`,
+    ]),
+  );
 }
 
 function HoverSelectionPanel({

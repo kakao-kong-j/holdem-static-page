@@ -8,6 +8,7 @@ interface Props {
   colorMap: Record<string, ColorDef>;
   borderColor?: Record<string, string>;
   highlightedHand?: string | null;
+  labelByHand?: Record<string, string>;
   onHoverHand?: (hand: string | null) => void;
   onClickHand?: (hand: string) => void;
 }
@@ -15,7 +16,7 @@ interface Props {
 const FOLD_COLOR: ColorDef = { bg: 'transparent', text: '#6b7280', label: '-' };
 const cellSize = { width: 'clamp(28px, 5.5vw, 52px)', height: 'clamp(28px, 5.5vw, 52px)' };
 
-export const RangeGrid = memo(function RangeGrid({ handAction, colorMap, borderColor, highlightedHand, onHoverHand, onClickHand }: Props) {
+export const RangeGrid = memo(function RangeGrid({ handAction, colorMap, borderColor, highlightedHand, labelByHand, onHoverHand, onClickHand }: Props) {
   return (
     <div className="inline-grid gap-[2px]" style={{ gridTemplateColumns: 'repeat(13, 1fr)' }}>
       {RANKS.map((_, ri) =>
@@ -27,6 +28,7 @@ export const RangeGrid = memo(function RangeGrid({ handAction, colorMap, borderC
           const isFold = action === 'fold';
           const border = borderColor?.[hand];
           const isHighlighted = highlightedHand === hand;
+          const label = labelByHand ? (labelByHand[hand] ?? '-') : color.label;
 
           return (
             <div
@@ -49,7 +51,7 @@ export const RangeGrid = memo(function RangeGrid({ handAction, colorMap, borderC
                 transform: isHighlighted ? 'scale(1.35)' : undefined,
                 zIndex: isHighlighted ? 20 : undefined,
               }}
-              title={`${hand} (${combos} combos) - ${action}`}
+              title={`${hand} (${combos} combos) - ${label}`}
               role={onClickHand ? 'button' : undefined}
               tabIndex={onClickHand ? 0 : undefined}
               onMouseEnter={onHoverHand ? () => onHoverHand(hand) : undefined}
@@ -63,7 +65,7 @@ export const RangeGrid = memo(function RangeGrid({ handAction, colorMap, borderC
               } : undefined}
             >
               <span className="text-[clamp(7px,1.3vw,11px)] font-bold leading-tight">{hand}</span>
-              <span className="text-[clamp(6px,1.1vw,9px)] leading-tight opacity-80">{color.label}</span>
+              <span className="text-[clamp(6px,1.1vw,9px)] leading-tight opacity-80">{label}</span>
             </div>
           );
         })
