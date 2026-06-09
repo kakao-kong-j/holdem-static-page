@@ -37,7 +37,7 @@ interface SeatInfo {
 const RANK_ORDER = 'AKQJT98765432';
 const VALID_SUITS = new Set(['c', 'd', 'h', 's']);
 const CARD_PATTERN = /^[2-9TJQKA][cdhs]$/i;
-const AMOUNT_PATTERN = '[\\d,]+(?:\\.\\d+)?';
+const AMOUNT_PATTERN = '₮?[\\d,]+(?:\\.\\d+)?';
 const SUPPORTED_RFI_POSITIONS: CoinPokerPosition[] = ['UTG', 'LJ', 'HJ', 'CO', 'BTN'];
 const VOLUNTARY_ACTIONS = new Set(['calls', 'raises', 'bets', 'ALLIN']);
 
@@ -84,7 +84,7 @@ function splitHandBlocks(raw: string): string[] {
 
 function parseHandBlock(block: string): CoinPokerHand | null {
   const header = block.match(
-    new RegExp(`^CoinPoker Hand #(\\d+):\\s+NLH\\s+\\((${AMOUNT_PATTERN})\\/(${AMOUNT_PATTERN})\\/(${AMOUNT_PATTERN})\\)\\s+(.+)$`, 'm'),
+    new RegExp(`^CoinPoker Hand #(\\d+):\\s+NLH\\s+\\((${AMOUNT_PATTERN})\\/(${AMOUNT_PATTERN})(?:\\/(${AMOUNT_PATTERN}))?\\)\\s+(.+)$`, 'm'),
   );
   const table = block.match(/^(?:Table|Tournament)\s+.+?\s+(\d+)-max Seat #(\d+) is the button$/m);
   const heroCardsMatch = block.match(/^Dealt to Hero \[([^\]]+)\]$/m);
@@ -100,7 +100,7 @@ function parseHandBlock(block: string): CoinPokerHand | null {
 
   const smallBlind = parseAmount(header[2]);
   const bigBlind = parseAmount(header[3]);
-  const ante = parseAmount(header[4]);
+  const ante = header[4] ? parseAmount(header[4]) : 0;
   const tableSize = Number(table[1]);
   const buttonSeat = Number(table[2]);
   const blindSeats = parseBlindSeats(block, seats);
@@ -251,7 +251,7 @@ function getExclusionReason(
 }
 
 function parseAmount(value: string): number {
-  return Number(value.replaceAll(',', ''));
+  return Number(value.replace(/[^\d.-]/g, ''));
 }
 
 function roundToTwo(value: number): number {

@@ -239,4 +239,57 @@ Hero: raises 2.00 to 3.00
       heroHand: 'AKs',
     });
   });
+
+  it('parses cash NLH hands with currency symbols and no ante', () => {
+    const hands = parseCoinPokerHands(`CoinPoker Hand #6072270386: NLH (₮0.01/₮0.02) 2026/06/04 00:25:19 KST
+Table '201367' 6-max Seat #5 is the button
+Seat 1: Hero (₮1.20 in chips)
+Seat 2: 6bff9b92 (₮1.35 in chips)
+Seat 3: 5be9502e (₮2.84 in chips)
+Seat 4: 0cc12ec6 (₮2 in chips)
+Seat 5: 785ffa60 (₮2.68 in chips)
+Seat 6: bb0916f7 (₮2.50 in chips)
+bb0916f7: posts small blind ₮0.01
+Hero: posts big blind ₮0.02
+*** HOLE CARDS ***
+Dealt to Hero [8c 6s]
+6bff9b92: folds
+5be9502e: folds
+0cc12ec6: raises ₮0.04 to ₮0.06
+785ffa60: folds
+bb0916f7: folds
+Hero: folds
+*** SUMMARY ***`);
+
+    expect(hands).toHaveLength(1);
+    expect(hands[0]).toMatchObject({
+      handId: '6072270386',
+      smallBlind: 0.01,
+      bigBlind: 0.02,
+      ante: 0,
+      tableSize: 6,
+      buttonSeat: 5,
+      heroStack: 1.2,
+      heroStackBb: 60,
+      heroPosition: 'BB',
+      heroCards: ['8c', '6s'],
+      heroHand: '86o',
+      heroFirstAction: 'folds',
+      exclusionReason: 'position-not-supported',
+    });
+  });
+
+  it('ignores PLO hands from cash history files', () => {
+    const hands = parseCoinPokerHands(`CoinPoker Hand #6081240159: PLO 4 (₮0.01/₮0.02) 2026/06/04 00:25:41 KST
+Table '200591' 6-max Seat #1 is the button
+Seat 1: 8b8327d0 (₮5.12 in chips)
+Seat 3: Hero (₮0.80 in chips)
+Hero: posts big blind ₮0.02
+*** HOLE CARDS ***
+Dealt to Hero [Kd Ts 3s 7h]
+Hero: folds
+*** SUMMARY ***`);
+
+    expect(hands).toHaveLength(0);
+  });
 });
