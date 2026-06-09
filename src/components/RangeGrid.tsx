@@ -8,14 +8,16 @@ interface Props {
   colorMap: Record<string, ColorDef>;
   borderColor?: Record<string, string>;
   highlightedHand?: string | null;
+  labelByHand?: Record<string, string>;
   onHoverHand?: (hand: string | null) => void;
+  onClickHand?: (hand: string) => void;
   handTitles?: Record<string, string>;
 }
 
 const FOLD_COLOR: ColorDef = { bg: 'transparent', text: '#6b7280', label: '-' };
 const cellSize = { width: 'clamp(28px, 5.5vw, 52px)', height: 'clamp(28px, 5.5vw, 52px)' };
 
-export const RangeGrid = memo(function RangeGrid({ handAction, colorMap, borderColor, highlightedHand, onHoverHand, handTitles }: Props) {
+export const RangeGrid = memo(function RangeGrid({ handAction, colorMap, borderColor, highlightedHand, labelByHand, onHoverHand, onClickHand, handTitles }: Props) {
   return (
     <div className="inline-grid gap-[2px]" style={{ gridTemplateColumns: 'repeat(13, 1fr)' }}>
       {RANKS.map((_, ri) =>
@@ -27,11 +29,14 @@ export const RangeGrid = memo(function RangeGrid({ handAction, colorMap, borderC
           const isFold = action === 'fold';
           const border = borderColor?.[hand];
           const isHighlighted = highlightedHand === hand;
+          const label = labelByHand ? (labelByHand[hand] ?? '-') : color.label;
 
           return (
             <div
               key={`${ri}-${ci}`}
-              className="flex flex-col items-center justify-center rounded-sm cursor-default select-none transition-transform hover:scale-110 hover:z-10 relative"
+              className={`flex flex-col items-center justify-center rounded-sm select-none transition-transform hover:scale-110 hover:z-10 relative ${
+                onClickHand ? 'cursor-pointer' : 'cursor-default'
+              }`}
               style={{
                 ...cellSize,
                 backgroundColor: color.bg || (isFold ? '#1f2937' : undefined),
@@ -47,12 +52,21 @@ export const RangeGrid = memo(function RangeGrid({ handAction, colorMap, borderC
                 transform: isHighlighted ? 'scale(1.35)' : undefined,
                 zIndex: isHighlighted ? 20 : undefined,
               }}
-              title={handTitles?.[hand] ?? `${hand} (${combos} combos) - ${action}`}
+              title={handTitles?.[hand] ?? `${hand} (${combos} combos) - ${label}`}
+              role={onClickHand ? 'button' : undefined}
+              tabIndex={onClickHand ? 0 : undefined}
               onMouseEnter={onHoverHand ? () => onHoverHand(hand) : undefined}
               onMouseLeave={onHoverHand ? () => onHoverHand(null) : undefined}
+              onClick={onClickHand ? () => onClickHand(hand) : undefined}
+              onKeyDown={onClickHand ? (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  onClickHand(hand);
+                }
+              } : undefined}
             >
               <span className="text-[clamp(7px,1.3vw,11px)] font-bold leading-tight">{hand}</span>
-              <span className="text-[clamp(6px,1.1vw,9px)] leading-tight opacity-80">{color.label}</span>
+              <span className="text-[clamp(6px,1.1vw,9px)] leading-tight opacity-80">{label}</span>
             </div>
           );
         })
