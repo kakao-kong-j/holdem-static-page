@@ -22,6 +22,10 @@ export interface CoinPokerHand {
   heroSeat: number | null;
   heroStack: number | null;
   heroStackBb: number | null;
+  /** Smallest opponent stack in BB (null if no opponents parsed). */
+  minVillainStackBb?: number | null;
+  /** Effective stack in BB = min(hero, smallest opponent). Used by tournament filters. */
+  effectiveStackBb?: number | null;
   heroPosition: CoinPokerPosition;
   heroCards: string[];
   heroHand: string | null;
@@ -113,6 +117,10 @@ function parseHandBlock(block: string): CoinPokerHand | null {
   const preflopActions = parsePreflopActions(block, positionByPlayer);
   const heroFirstAction = preflopActions.find((action) => action.player === 'Hero')?.action ?? null;
   const heroStackBb = roundToTwo(heroSeatInfo.stack / bigBlind);
+  const villainChips = seats.filter((seat) => seat.player !== 'Hero').map((seat) => seat.stack);
+  const minVillainStackBb = villainChips.length ? roundToTwo(Math.min(...villainChips) / bigBlind) : null;
+  const effectiveChips = villainChips.length ? Math.min(heroSeatInfo.stack, ...villainChips) : heroSeatInfo.stack;
+  const effectiveStackBb = roundToTwo(effectiveChips / bigBlind);
   const exclusionReason = getExclusionReason(preflopActions, heroFirstAction, heroPosition);
 
   return {
@@ -128,6 +136,8 @@ function parseHandBlock(block: string): CoinPokerHand | null {
     heroSeat: heroSeatInfo.seat,
     heroStack: heroSeatInfo.stack,
     heroStackBb,
+    minVillainStackBb,
+    effectiveStackBb,
     heroPosition,
     heroCards,
     heroHand,

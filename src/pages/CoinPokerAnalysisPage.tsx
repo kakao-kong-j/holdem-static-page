@@ -44,6 +44,7 @@ export function CoinPokerAnalysisPage({ fallbackStack, data }: Props) {
   const [store, setStore] = useState<CoinPokerStore>(EMPTY_COINPOKER_STORE);
   const [gameType, setGameType] = useState<CoinPokerGameType>('cash');
   const [chartLimit, setChartLimit] = useState(Number.MAX_SAFE_INTEGER); // "all" until adjusted
+  const [excludeShortStack, setExcludeShortStack] = useState(false); // tournament: drop effective ≤ 10BB
   const [draftText, setDraftText] = useState('');
   const [loading, setLoading] = useState(true);
   const [progress, setProgress] = useState<LoadProgress | null>(null);
@@ -66,11 +67,37 @@ export function CoinPokerAnalysisPage({ fallbackStack, data }: Props) {
 
   const parsedHands = gameType === 'cash' ? store.cash : store.tournament;
 
+  // Tournament-only: exclude short-stack (effective ≤ 10BB) push/fold spots.
+  // effectiveStackBb is set by the current parser; legacy stored hands lack it,
+  // so we re-derive from rawText (only when the filter is active, memoized).
+  const SHORT_STACK_BB = 10;
+  const shortStackActive = gameType === 'tournament' && excludeShortStack;
+  const effectiveByHandId = useMemo(() => {
+    if (!shortStackActive) return null;
+    const map = new Map<string, number>();
+    for (const h of parsedHands) {
+      let eff = typeof h.effectiveStackBb === 'number' ? h.effectiveStackBb : undefined;
+      if (eff === undefined) {
+        const reparsed = parseCoinPokerHands(h.rawText)[0];
+        eff = typeof reparsed?.effectiveStackBb === 'number' ? reparsed.effectiveStackBb : (h.heroStackBb ?? Infinity);
+      }
+      map.set(h.handId, eff);
+    }
+    return map;
+  }, [shortStackActive, parsedHands]);
+
+  const filteredHands = useMemo(() => {
+    if (!shortStackActive || !effectiveByHandId) return parsedHands;
+    return parsedHands.filter(h => (effectiveByHandId.get(h.handId) ?? Infinity) > SHORT_STACK_BB);
+  }, [parsedHands, shortStackActive, effectiveByHandId]);
+
+  const shortStackExcludedCount = parsedHands.length - filteredHands.length;
+
   // Newest-first by numeric handId (CoinPoker hand numbers increase over time),
   // so the limit charts the most recent N hands.
   const sortedHands = useMemo(
-    () => [...parsedHands].sort((a, b) => Number(b.handId) - Number(a.handId)),
-    [parsedHands],
+    () => [...filteredHands].sort((a, b) => Number(b.handId) - Number(a.handId)),
+    [filteredHands],
   );
   const totalHands = sortedHands.length;
   const effectiveLimit = totalHands === 0 ? 0 : Math.max(1, Math.min(chartLimit, totalHands));
@@ -290,6 +317,22 @@ export function CoinPokerAnalysisPage({ fallbackStack, data }: Props) {
           </div>
         ) : (
           <>
+            {gameType === 'tournament' && (
+              <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-800 bg-gray-950/20 p-3 text-xs text-gray-300">
+                <input
+                  type="checkbox"
+                  checked={excludeShortStack}
+                  onChange={(e) => setExcludeShortStack(e.target.checked)}
+                  className="h-4 w-4 accent-indigo-500"
+                />
+                <span>유효스택 10BB 이하 제외</span>
+                <span className="text-gray-500">
+                  (상대·나 중 짧은 스택 기준
+                  {excludeShortStack && shortStackExcludedCount > 0 ? ` · ${shortStackExcludedCount}핸드 제외됨` : ''})
+                </span>
+              </label>
+            )}
+
             <div className="flex flex-col gap-2 rounded-lg border border-gray-800 bg-gray-950/20 p-3 sm:flex-row sm:items-center sm:gap-4">
               <div className="flex items-center gap-2 whitespace-nowrap text-xs text-gray-400">
                 <span>차트에 그릴 핸드 (최신순)</span>
