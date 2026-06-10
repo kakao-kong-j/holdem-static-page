@@ -1,13 +1,13 @@
 import crypto from 'node:crypto';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { buildAuthUrl, codeChallengeS256, getRedirectUri, randomString } from '../_lib/google';
+import { buildAuthUrl, codeChallengeS256, getRedirectUri, randomString } from '../_lib/google.js';
 import {
   appendCookie,
   isSecure,
   OAUTH_STATE_COOKIE,
   OAUTH_VERIFIER_COOKIE,
   serializeCookie,
-} from '../_lib/session';
+} from '../_lib/session.js';
 
 /** sha256 hex of the input, matching the legacy client-side password hash. */
 function sha256Hex(value: string): string {

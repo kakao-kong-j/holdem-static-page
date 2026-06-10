@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { exchangeCode, getRedirectUri } from '../../_lib/google';
+import { exchangeCode, getRedirectUri } from '../../_lib/google.js';
 import {
   clearCookie,
   createSessionToken,
@@ -7,7 +7,7 @@ import {
   OAUTH_VERIFIER_COOKIE,
   parseCookies,
   setSessionCookie,
-} from '../../_lib/session';
+} from '../../_lib/session.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
   const code = typeof req.query.code === 'string' ? req.query.code : undefined;

@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { del, list, put } from '@vercel/blob';
-import { getSessionUser } from './_lib/session';
+import { getSessionUser } from './_lib/session.js';
 
 type GameType = 'cash' | 'tournament';
 
