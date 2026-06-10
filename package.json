@@ -9,12 +9,15 @@
     "decrypt": "openssl enc -aes-256-cbc -d -salt -pbkdf2 -in public/gto-preflop-charts-all.json.enc -out public/gto-preflop-charts-all.json -pass pass:$DATA_KEY",
     "encrypt": "openssl enc -aes-256-cbc -e -salt -pbkdf2 -in public/gto-preflop-charts-all.json -out public/gto-preflop-charts-all.json.enc -pass pass:$DATA_KEY",
     "build:vercel": "npm run decrypt && npm run build",
+    "dev:vercel": "vercel dev",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@vercel/blob": "^2.4.0",
+    "jose": "^6.2.3",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   },
@@ -24,6 +27,7 @@
     "@types/node": "^24.12.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "@vercel/node": "^5.8.14",
     "@vitejs/plugin-react": "^6.0.1",
     "@vitest/ui": "^4.1.4",
     "eslint": "^9.39.4",

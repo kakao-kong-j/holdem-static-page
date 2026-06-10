@@ -1,5 +1,7 @@
 export type CoinPokerPosition = 'UTG' | 'LJ' | 'HJ' | 'CO' | 'BTN' | 'SB' | 'BB' | 'UNKNOWN';
 
+export type CoinPokerGameType = 'cash' | 'tournament';
+
 export interface CoinPokerAction {
   player: string;
   position?: CoinPokerPosition;
@@ -9,6 +11,7 @@ export interface CoinPokerAction {
 
 export interface CoinPokerHand {
   handId: string;
+  gameType: CoinPokerGameType;
   rawText: string;
   startedAt: string;
   smallBlind: number;
@@ -86,7 +89,7 @@ function parseHandBlock(block: string): CoinPokerHand | null {
   const header = block.match(
     new RegExp(`^CoinPoker Hand #(\\d+):\\s+NLH\\s+\\((${AMOUNT_PATTERN})\\/(${AMOUNT_PATTERN})(?:\\/(${AMOUNT_PATTERN}))?\\)\\s+(.+)$`, 'm'),
   );
-  const table = block.match(/^(?:Table|Tournament)\s+.+?\s+(\d+)-max Seat #(\d+) is the button$/m);
+  const table = block.match(/^(Table|Tournament)\s+.+?\s+(\d+)-max Seat #(\d+) is the button$/m);
   const heroCardsMatch = block.match(/^Dealt to Hero \[([^\]]+)\]$/m);
 
   if (!header || !table || !heroCardsMatch) return null;
@@ -101,8 +104,9 @@ function parseHandBlock(block: string): CoinPokerHand | null {
   const smallBlind = parseAmount(header[2]);
   const bigBlind = parseAmount(header[3]);
   const ante = header[4] ? parseAmount(header[4]) : 0;
-  const tableSize = Number(table[1]);
-  const buttonSeat = Number(table[2]);
+  const gameType: CoinPokerGameType = table[1] === 'Tournament' ? 'tournament' : 'cash';
+  const tableSize = Number(table[2]);
+  const buttonSeat = Number(table[3]);
   const blindSeats = parseBlindSeats(block, seats);
   const positionByPlayer = buildPositionByPlayer(seats, buttonSeat, blindSeats);
   const heroPosition = positionByPlayer.get('Hero') ?? 'UNKNOWN';
@@ -113,6 +117,7 @@ function parseHandBlock(block: string): CoinPokerHand | null {
 
   return {
     handId: header[1],
+    gameType,
     rawText: block,
     startedAt: header[5],
     smallBlind,

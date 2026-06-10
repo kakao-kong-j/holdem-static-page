@@ -3,6 +3,6 @@
   "buildCommand": "npm run build:vercel",
   "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/(.*)", "destination": "/" }
+    { "source": "/((?!api/|@|src/|node_modules/|.*\\.).*)", "destination": "/" }
   ]
 }

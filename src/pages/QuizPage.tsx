@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { ACTION_COLORS, POSITION_COLORS, STACK_SIZES } from '../constants';
 import { generateQuizQuestion, saveQuizRecord, actionLabel, loadQuizRecords } from '../utils/quiz';
+import { pushQuizRecords } from '../utils/recordsSync';
 import type { QuizChartFilter } from '../utils/quiz';
 import type { AllData, StackSize, QuizQuestion, QuizRecord } from '../types';
 
@@ -75,6 +76,9 @@ export function QuizPage({ data }: Props) {
       timestamp: Date.now(),
     };
     saveQuizRecord(record);
+    pushQuizRecords([record]).catch(() => {
+      /* offline or /api unavailable — record stays in localStorage */
+    });
     setPhase('result');
   };
 

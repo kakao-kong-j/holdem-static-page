@@ -4,14 +4,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-GTO (Game Theory Optimal) preflop charts visualization app for poker. Displays 13x13 hand grids showing optimal actions per position/stack depth. Korean UI. Deployed on GitHub Pages.
+GTO (Game Theory Optimal) preflop charts visualization app for poker. Displays 13x13 hand grids showing optimal actions per position/stack depth. Korean UI. Deployed on Vercel (primary; Google login + per-user data via serverless `/api`); a chart-only mirror can run on GitHub Pages.
 
 ## Tech Stack
 
 - React + TypeScript + Vite
 - Tailwind CSS (via @tailwindcss/vite)
 - No external charting libraries (grids are custom-built)
-- GitHub Pages deployment via GitHub Actions
+- Vercel Functions (`/api`) for auth + user data; `jose` (JWT), `@vercel/blob` (storage)
+- Deploy: Vercel (primary) / GitHub Pages (chart-only mirror)
 
 ## Build & Dev Commands
 
@@ -37,6 +38,14 @@ npm run preview    # Preview production build
 2. **SB Open** - Dedicated view for SB's RFI range. Available at 15BB (call / all-in) and 100BB (limp / raise / raise_bluff). Not shown at 25/40BB where SB uses the standard RFI structure.
 3. **Facing Charts** - Specific situation charts. Two categories: `상대 오픈 대응` (Facing RFI / BvB) and `내 오픈 후 대응` (RFI vs Allin at 15BB, RFI vs 3bet at 100BB). Color = action color. Dropdown selectors for hero/villain; the second category is filtered out at stacks where no matching charts exist.
 4. **Quiz / Stats** - Practice quiz against chart data, plus stats (profile radar, accuracy, wrong list, GTO-vs-your-answer compare grid).
+
+### Authentication & User Data (Vercel only)
+
+- **Login**: Google OAuth via serverless functions in `/api` (hand-rolled OAuth2 + PKCE, no `arctic`). Session is a JWT (`jose`, HS256) in an httpOnly cookie. The whole app is gated behind login (`LoginGate` / `useAuth` → `/api/auth/me`).
+- **Per-user storage**: quiz records persist to **Vercel Blob** at `users/{googleSub}/records.json` (single file; read → merge-by-`timestamp` → overwrite). No database. `lost-update` is accepted (single-user, non-concurrent assumption).
+- **Sync model**: localStorage stays the working store; `src/utils/recordsSync.ts` reconciles with the server on login, after each quiz answer, and on import/clear. All sync calls swallow errors so plain `npm run dev` (no `/api`) still works locally.
+- **Requires `/api`**: login/sync only run on Vercel. Plain `vite` dev → use `vercel dev` to exercise auth. **GitHub Pages cannot serve `/api`, so login does not work there** — Vercel is the deployment for the authenticated app.
+- Full design + setup steps: `docs/LOGIN_PLAN.md`. API files: `api/auth/*`, `api/records.ts`, `api/_lib/*`.
 
 ### Key Source Files
 
@@ -80,13 +89,15 @@ Historical note: prior revisions of this doc listed combined totals (e.g. 1020/3
 
 ## Deployment
 
-**GitHub Pages** (primary):
+**Vercel** (primary — required for login/user data):
+- Config: `vercel.json` (framework=vite, buildCommand=`npm run build:vercel`); SPA rewrite excludes `/api` (`/((?!api/).*)`)
+- Root-domain serve → Vite `base` falls back to `/` when `VERCEL=1` is set
+- Same source data (`public/gto-preflop-charts-all.json.enc`) decrypted at build
+- Required env vars: `DATA_KEY` (openssl decrypt), `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `JWT_SECRET`; `BLOB_READ_WRITE_TOKEN` auto-injected when a Blob store is linked. Optional `GOOGLE_REDIRECT_URI`. See `.env.example`.
+- Google Cloud Console: register redirect URI `https://<domain>/api/auth/google/callback`
+
+**GitHub Pages** (public/chart-only — no login):
 - Workflow: `.github/workflows/deploy.yml`
 - Vite `base: '/holdem-static-page/'` (subpath)
 - Push to `main` triggers auto-deploy
-
-**Vercel** (secondary):
-- Config: `vercel.json` (framework=vite, buildCommand=`npm run build:vercel`)
-- Root-domain serve → Vite `base` falls back to `/` when `VERCEL=1` is set
-- Required env vars in Vercel dashboard: `DATA_KEY` (for `openssl` decrypt), `VITE_PASSWORD_HASH`
-- Same source data (`public/gto-preflop-charts-all.json.enc`) decrypted at build
+- `/api` is unavailable here, so the Google-login flow cannot run; treat this as a chart-only mirror (or retire it). The legacy `VITE_PASSWORD_HASH` env var is no longer used by the app.
