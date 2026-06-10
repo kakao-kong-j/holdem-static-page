@@ -29,10 +29,6 @@ export function useAuth() {
     };
   }, []);
 
-  const login = useCallback(() => {
-    window.location.href = '/api/auth/google';
-  }, []);
-
   const logout = useCallback(async () => {
     try {
       await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
@@ -43,5 +39,5 @@ export function useAuth() {
     window.location.reload();
   }, []);
 
-  return { user, isAuthenticated: !!user, checking, login, logout };
+  return { user, isAuthenticated: !!user, checking, logout };
 }

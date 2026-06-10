@@ -1,30 +1,40 @@
-interface Props {
-  onLogin: () => void;
-}
-
 const ERROR_MESSAGES: Record<string, string> = {
+  password: '비밀번호가 올바르지 않습니다.',
   state: '로그인 세션이 만료되었습니다. 다시 시도해 주세요.',
   config: '서버 설정 오류입니다. 관리자에게 문의하세요.',
   exchange: '구글 인증에 실패했습니다. 다시 시도해 주세요.',
 };
 
-export function LoginGate({ onLogin }: Props) {
+export function LoginGate() {
   const params = new URLSearchParams(window.location.search);
   const errorCode = params.get('login_error');
   const errorMessage = errorCode ? ERROR_MESSAGES[errorCode] ?? '로그인에 실패했습니다.' : null;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-900">
-      <div className="bg-gray-800 rounded-xl p-8 w-full max-w-sm mx-4 shadow-2xl">
+      <form
+        method="POST"
+        action="/api/auth/google"
+        className="bg-gray-800 rounded-xl p-8 w-full max-w-sm mx-4 shadow-2xl"
+      >
         <h1 className="text-xl font-bold text-white text-center mb-1">GTO Preflop Charts</h1>
-        <p className="text-sm text-gray-400 text-center mb-6">계속하려면 로그인하세요</p>
+        <p className="text-sm text-gray-400 text-center mb-6">비밀번호 입력 후 로그인하세요</p>
+
+        <input
+          type="password"
+          name="password"
+          required
+          autoFocus
+          placeholder="비밀번호"
+          className="mb-4 w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-indigo-500"
+        />
 
         {errorMessage && (
           <p className="text-red-400 text-sm text-center mb-4">{errorMessage}</p>
         )}
 
         <button
-          onClick={onLogin}
+          type="submit"
           className="w-full flex items-center justify-center gap-3 py-3 bg-white text-gray-800 font-medium rounded-lg hover:bg-gray-100 transition-colors"
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24" aria-hidden="true">
@@ -35,7 +45,7 @@ export function LoginGate({ onLogin }: Props) {
           </svg>
           Google로 로그인
         </button>
-      </div>
+      </form>
     </div>
   );
 }

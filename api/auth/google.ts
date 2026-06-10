@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { buildAuthUrl, codeChallengeS256, getRedirectUri, randomString } from '../_lib/google';
 import {
@@ -8,10 +9,34 @@ import {
   serializeCookie,
 } from '../_lib/session';
 
+/** sha256 hex of the input, matching the legacy client-side password hash. */
+function sha256Hex(value: string): string {
+  return crypto.createHash('sha256').update(value, 'utf8').digest('hex');
+}
+
+function passwordOk(submitted: string): boolean {
+  const expected = process.env.PAGE_PASSWORD_HASH;
+  if (!expected || !submitted) return false;
+  const got = sha256Hex(submitted);
+  if (got.length !== expected.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(got), Buffer.from(expected));
+}
+
 export default function handler(req: VercelRequest, res: VercelResponse): void {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   if (!clientId) {
     res.status(500).json({ error: 'GOOGLE_CLIENT_ID is not set' });
+    return;
+  }
+
+  // Gate: the shared page password must be submitted (POST form) and valid.
+  const submitted =
+    req.method === 'POST' && req.body && typeof req.body === 'object'
+      ? String((req.body as Record<string, unknown>).password ?? '')
+      : '';
+  if (!passwordOk(submitted)) {
+    res.writeHead(302, { Location: '/?login_error=password' });
+    res.end();
     return;
   }
 

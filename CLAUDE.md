@@ -42,6 +42,7 @@ npm run preview    # Preview production build
 ### Authentication & User Data (Vercel only)
 
 - **Login**: Google OAuth via serverless functions in `/api` (hand-rolled OAuth2 + PKCE, no `arctic`). Session is a JWT (`jose`, HS256) in an httpOnly cookie. The whole app is gated behind login (`LoginGate` / `useAuth` → `/api/auth/me`).
+- **Password gate**: the login form POSTs to `/api/auth/google` with the shared page password; the server checks it against `PAGE_PASSWORD_HASH` (sha256 hex) and only then starts the OAuth redirect. Wrong/empty password → `/?login_error=password`. Enforced server-side (cannot bypass by hitting `/api/auth/google` directly).
 - **Per-user storage**: quiz records persist to **Vercel Blob** at `users/{googleSub}/records.json` (single file; read → merge-by-`timestamp` → overwrite). No database. `lost-update` is accepted (single-user, non-concurrent assumption).
 - **Sync model**: localStorage stays the working store; `src/utils/recordsSync.ts` reconciles with the server on login, after each quiz answer, and on import/clear. All sync calls swallow errors so plain `npm run dev` (no `/api`) still works locally.
 - **Requires `/api`**: login/sync only run on Vercel. Plain `vite` dev → use `vercel dev` to exercise auth. **GitHub Pages cannot serve `/api`, so login does not work there** — Vercel is the deployment for the authenticated app.
@@ -93,7 +94,7 @@ Historical note: prior revisions of this doc listed combined totals (e.g. 1020/3
 - Config: `vercel.json` (framework=vite, buildCommand=`npm run build:vercel`); SPA rewrite excludes `/api` (`/((?!api/).*)`)
 - Root-domain serve → Vite `base` falls back to `/` when `VERCEL=1` is set
 - Same source data (`public/gto-preflop-charts-all.json.enc`) decrypted at build
-- Required env vars: `DATA_KEY` (openssl decrypt), `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `JWT_SECRET`; `BLOB_READ_WRITE_TOKEN` auto-injected when a Blob store is linked. Optional `GOOGLE_REDIRECT_URI`. See `.env.example`.
+- Required env vars: `DATA_KEY` (openssl decrypt), `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `JWT_SECRET`, `PAGE_PASSWORD_HASH` (sha256 hex of the page password); `BLOB_READ_WRITE_TOKEN` auto-injected when a Blob store is linked. Optional `GOOGLE_REDIRECT_URI`. See `.env.example`.
 - Google Cloud Console: register redirect URI `https://<domain>/api/auth/google/callback`
 
 **GitHub Pages** (public/chart-only — no login):

@@ -31,7 +31,7 @@ const VIEWS: { value: View; label: string }[] = [
 const SB_OPEN_DISABLED_STACKS: StackSize[] = [];
 
 function App() {
-  const { user, isAuthenticated, checking, login, logout } = useAuth();
+  const { user, isAuthenticated, checking, logout } = useAuth();
   const { data, loading, error } = useChartData(isAuthenticated);
   const [stack, setStack] = useState<StackSize>('100BB');
   const [view, setView] = useState<View>('open-range');
@@ -80,7 +80,7 @@ function App() {
   }
 
   if (!isAuthenticated) {
-    return <LoginGate onLogin={login} />;
+    return <LoginGate />;
   }
 
   if (loading) {
