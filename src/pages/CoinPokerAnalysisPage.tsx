@@ -43,6 +43,7 @@ interface MistakeHandSummary {
 export function CoinPokerAnalysisPage({ fallbackStack, data }: Props) {
   const [store, setStore] = useState<CoinPokerStore>(EMPTY_COINPOKER_STORE);
   const [gameType, setGameType] = useState<CoinPokerGameType>('cash');
+  const [chartLimit, setChartLimit] = useState(Number.MAX_SAFE_INTEGER); // "all" until adjusted
   const [draftText, setDraftText] = useState('');
   const [loading, setLoading] = useState(true);
   const [progress, setProgress] = useState<LoadProgress | null>(null);
@@ -64,7 +65,18 @@ export function CoinPokerAnalysisPage({ fallbackStack, data }: Props) {
   }, []);
 
   const parsedHands = gameType === 'cash' ? store.cash : store.tournament;
-  const comparison = useMemo(() => compareCoinPokerAutoStack(parsedHands, data, fallbackStack), [parsedHands, data, fallbackStack]);
+
+  // Newest-first by numeric handId (CoinPoker hand numbers increase over time),
+  // so the limit charts the most recent N hands.
+  const sortedHands = useMemo(
+    () => [...parsedHands].sort((a, b) => Number(b.handId) - Number(a.handId)),
+    [parsedHands],
+  );
+  const totalHands = sortedHands.length;
+  const effectiveLimit = totalHands === 0 ? 0 : Math.max(1, Math.min(chartLimit, totalHands));
+  const chartedHands = useMemo(() => sortedHands.slice(0, effectiveLimit), [sortedHands, effectiveLimit]);
+
+  const comparison = useMemo(() => compareCoinPokerAutoStack(chartedHands, data, fallbackStack), [chartedHands, data, fallbackStack]);
   const summary = useMemo(() => summarizeCoinPokerComparison(comparison), [comparison]);
   const comparisonGrid = useMemo(() => buildCoinPokerGrid(comparison), [comparison]);
   const gridMistakeLabels = useMemo(() => buildGridMistakeLabels(comparison), [comparison]);
@@ -278,6 +290,40 @@ export function CoinPokerAnalysisPage({ fallbackStack, data }: Props) {
           </div>
         ) : (
           <>
+            <div className="flex flex-col gap-2 rounded-lg border border-gray-800 bg-gray-950/20 p-3 sm:flex-row sm:items-center sm:gap-4">
+              <div className="flex items-center gap-2 whitespace-nowrap text-xs text-gray-400">
+                <span>차트에 그릴 핸드 (최신순)</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={totalHands}
+                  value={effectiveLimit}
+                  onChange={(e) =>
+                    setChartLimit(Math.max(1, Math.min(totalHands, Number(e.target.value) || 1)))
+                  }
+                  className="w-20 rounded border border-gray-700 bg-gray-900 px-2 py-1 text-gray-200 outline-none focus:border-indigo-500"
+                />
+                <span className="text-gray-500">/ 전체 {totalHands}</span>
+              </div>
+              <input
+                type="range"
+                min={1}
+                max={Math.max(1, totalHands)}
+                value={effectiveLimit}
+                onChange={(e) => setChartLimit(Number(e.target.value))}
+                className="w-full flex-1 accent-indigo-500"
+                aria-label="차트에 그릴 최신 핸드 수"
+              />
+              <button
+                type="button"
+                onClick={() => setChartLimit(Number.MAX_SAFE_INTEGER)}
+                disabled={effectiveLimit >= totalHands}
+                className="shrink-0 rounded bg-gray-800 px-2.5 py-1 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                전체
+              </button>
+            </div>
+
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
               {summaryItems.map((item) => (
                 <div key={item.label} className="rounded-lg border border-gray-800 bg-gray-900/60 px-3 py-2">
