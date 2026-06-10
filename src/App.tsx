@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from './hooks/useAuth';
 import { useChartData } from './hooks/useChartData';
-import { PasswordGate } from './components/PasswordGate';
+import { syncQuizRecords } from './utils/recordsSync';
+import { LoginGate } from './components/LoginGate';
 import { StackTabs } from './components/StackTabs';
 import { OpenRangePage } from './pages/OpenRangePage';
 import { SbOpenPage } from './pages/SbOpenPage';
@@ -30,7 +31,7 @@ const VIEWS: { value: View; label: string }[] = [
 const SB_OPEN_DISABLED_STACKS: StackSize[] = [];
 
 function App() {
-  const { isAuthenticated, login } = useAuth();
+  const { user, isAuthenticated, checking, logout } = useAuth();
   const { data, loading, error } = useChartData(isAuthenticated);
   const [stack, setStack] = useState<StackSize>('100BB');
   const [view, setView] = useState<View>('open-range');
@@ -40,6 +41,14 @@ function App() {
       setStack('100BB');
     }
   }, [view, stack]);
+
+  // On login, reconcile local quiz records with the server-side store.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    syncQuizRecords().catch(() => {
+      /* offline or /api unavailable (e.g. plain vite dev) — keep working locally */
+    });
+  }, [isAuthenticated]);
 
   const navigate = (intent: NavigateIntent) => {
     if (intent.kind === 'chart') {
@@ -62,8 +71,16 @@ function App() {
     }
   };
 
+  if (checking) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-gray-400">
+        로그인 확인 중...
+      </div>
+    );
+  }
+
   if (!isAuthenticated) {
-    return <PasswordGate onLogin={login} />;
+    return <LoginGate />;
   }
 
   if (loading) {
@@ -86,9 +103,24 @@ function App() {
 
   return (
     <div className={`min-h-screen p-4 mx-auto ${view === 'coinpoker' ? 'max-w-7xl' : 'max-w-4xl'}`}>
-      <h1 className="text-xl font-bold text-center mb-4 text-white">
-        GTO Preflop Charts
-      </h1>
+      <div className="relative mb-4">
+        <h1 className="text-xl font-bold text-center text-white">
+          GTO Preflop Charts
+        </h1>
+        <div className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-2">
+          {user?.name && (
+            <span className="hidden sm:inline text-xs text-gray-400 max-w-[120px] truncate">
+              {user.name}
+            </span>
+          )}
+          <button
+            onClick={logout}
+            className="px-2.5 py-1 text-xs bg-gray-800 text-gray-400 rounded-lg hover:bg-gray-700 hover:text-gray-200 transition-colors"
+          >
+            로그아웃
+          </button>
+        </div>
+      </div>
 
       <div className="flex flex-wrap justify-center gap-2 mb-4">
         {VIEWS.map(({ value, label }) => (

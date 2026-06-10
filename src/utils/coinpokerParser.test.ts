@@ -147,6 +147,7 @@ describe('parseCoinPokerHands', () => {
 
     expect(hands[1]).toMatchObject({
       handId: '68315300003',
+      gameType: 'tournament',
       smallBlind: 60,
       bigBlind: 120,
       ante: 15,
@@ -264,6 +265,7 @@ Hero: folds
     expect(hands).toHaveLength(1);
     expect(hands[0]).toMatchObject({
       handId: '6072270386',
+      gameType: 'cash',
       smallBlind: 0.01,
       bigBlind: 0.02,
       ante: 0,

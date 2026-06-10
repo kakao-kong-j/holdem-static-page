@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { RangeGrid } from '../components/RangeGrid';
 import {
   COINPOKER_COMPARE_COLORS,
@@ -8,8 +8,22 @@ import {
   summarizeCoinPokerComparison,
   type CoinPokerComparisonItem,
 } from '../utils/coinpokerCompare';
-import { parseCoinPokerHands } from '../utils/coinpokerParser';
+import { parseCoinPokerHands, type CoinPokerGameType } from '../utils/coinpokerParser';
+import {
+  EMPTY_COINPOKER_STORE,
+  clearCoinPokerHands,
+  fetchCoinPokerHands,
+  mergeCoinPokerStore,
+  pushCoinPokerHands,
+  type CoinPokerStore,
+  type LoadProgress,
+} from '../utils/coinpokerSync';
 import type { AllData, StackSize } from '../types';
+
+const GAME_TYPE_TABS: { value: CoinPokerGameType; label: string }[] = [
+  { value: 'cash', label: 'Cash' },
+  { value: 'tournament', label: 'Tournament' },
+];
 
 interface Props {
   fallbackStack: StackSize;
@@ -27,16 +41,69 @@ interface MistakeHandSummary {
 }
 
 export function CoinPokerAnalysisPage({ fallbackStack, data }: Props) {
-  const [rawText, setRawText] = useState('');
+  const [store, setStore] = useState<CoinPokerStore>(EMPTY_COINPOKER_STORE);
+  const [gameType, setGameType] = useState<CoinPokerGameType>('cash');
+  const [chartLimit, setChartLimit] = useState(Number.MAX_SAFE_INTEGER); // "all" until adjusted
+  const [excludeShortStack, setExcludeShortStack] = useState(false); // tournament: drop effective ≤ 10BB
+  const [draftText, setDraftText] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [progress, setProgress] = useState<LoadProgress | null>(null);
+  const [busy, setBusy] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [hoveredHand, setHoveredHand] = useState<string | null>(null);
   const [pinnedHand, setPinnedHand] = useState<string | null>(null);
   const [selectedHandHistory, setSelectedHandHistory] = useState<CoinPokerComparisonItem | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const inputVersionRef = useRef(0);
 
-  const parsedHands = useMemo(() => parseCoinPokerHands(rawText), [rawText]);
-  const comparison = useMemo(() => compareCoinPokerAutoStack(parsedHands, data, fallbackStack), [parsedHands, data, fallbackStack]);
+  // Load accumulated hands (both game types) on mount, reporting download progress.
+  useEffect(() => {
+    let cancelled = false;
+    fetchCoinPokerHands(p => { if (!cancelled) setProgress(p); })
+      .then(s => { if (!cancelled) setStore(s); })
+      .catch(() => { /* offline / no /api — start empty, uploads stay in-memory */ })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const parsedHands = gameType === 'cash' ? store.cash : store.tournament;
+
+  // Tournament-only: exclude short-stack (effective ≤ 10BB) push/fold spots.
+  // effectiveStackBb is set by the current parser; legacy stored hands lack it,
+  // so we re-derive from rawText (only when the filter is active, memoized).
+  const SHORT_STACK_BB = 10;
+  const shortStackActive = gameType === 'tournament' && excludeShortStack;
+  const effectiveByHandId = useMemo(() => {
+    if (!shortStackActive) return null;
+    const map = new Map<string, number>();
+    for (const h of parsedHands) {
+      let eff = typeof h.effectiveStackBb === 'number' ? h.effectiveStackBb : undefined;
+      if (eff === undefined) {
+        const reparsed = parseCoinPokerHands(h.rawText)[0];
+        eff = typeof reparsed?.effectiveStackBb === 'number' ? reparsed.effectiveStackBb : (h.heroStackBb ?? Infinity);
+      }
+      map.set(h.handId, eff);
+    }
+    return map;
+  }, [shortStackActive, parsedHands]);
+
+  const filteredHands = useMemo(() => {
+    if (!shortStackActive || !effectiveByHandId) return parsedHands;
+    return parsedHands.filter(h => (effectiveByHandId.get(h.handId) ?? Infinity) > SHORT_STACK_BB);
+  }, [parsedHands, shortStackActive, effectiveByHandId]);
+
+  const shortStackExcludedCount = parsedHands.length - filteredHands.length;
+
+  // Newest-first by numeric handId (CoinPoker hand numbers increase over time),
+  // so the limit charts the most recent N hands.
+  const sortedHands = useMemo(
+    () => [...filteredHands].sort((a, b) => Number(b.handId) - Number(a.handId)),
+    [filteredHands],
+  );
+  const totalHands = sortedHands.length;
+  const effectiveLimit = totalHands === 0 ? 0 : Math.max(1, Math.min(chartLimit, totalHands));
+  const chartedHands = useMemo(() => sortedHands.slice(0, effectiveLimit), [sortedHands, effectiveLimit]);
+
+  const comparison = useMemo(() => compareCoinPokerAutoStack(chartedHands, data, fallbackStack), [chartedHands, data, fallbackStack]);
   const summary = useMemo(() => summarizeCoinPokerComparison(comparison), [comparison]);
   const comparisonGrid = useMemo(() => buildCoinPokerGrid(comparison), [comparison]);
   const gridMistakeLabels = useMemo(() => buildGridMistakeLabels(comparison), [comparison]);
@@ -49,48 +116,80 @@ export function CoinPokerAnalysisPage({ fallbackStack, data }: Props) {
     return pinnedHand === activeHand ? sortPinnedSelectionItems(items) : items;
   }, [activeHand, comparisonByHand, pinnedHand]);
 
-  const isEmpty = rawText.trim().length === 0;
-  const hasUnparsedText = !isEmpty && parsedHands.length === 0;
+  const isEmpty = parsedHands.length === 0;
+  const counts = { cash: store.cash.length, tournament: store.tournament.length };
+
+  const resetSelection = () => {
+    setHoveredHand(null);
+    setPinnedHand(null);
+    setSelectedHandHistory(null);
+  };
+
+  // Parse text, merge into the store (deduped by handId), and persist to the server.
+  const ingest = async (text: string) => {
+    const parsed = parseCoinPokerHands(text);
+    if (parsed.length === 0) {
+      setFileError('CoinPoker 핸드를 찾지 못했습니다. 핸드 히스토리 형식을 확인해 주세요.');
+      return;
+    }
+    setFileError(null);
+    resetSelection();
+
+    // Optimistic local merge so it shows immediately even without /api.
+    setStore(prev => mergeCoinPokerStore(prev, parsed));
+
+    // Switch to the tab that received the most new hands.
+    const tournamentCount = parsed.filter(h => h.gameType === 'tournament').length;
+    setGameType(tournamentCount > parsed.length - tournamentCount ? 'tournament' : 'cash');
+
+    setBusy(true);
+    try {
+      const merged = await pushCoinPokerHands(parsed);
+      setStore(merged);
+    } catch (err) {
+      // HTTP error (e.g. expired session) → the optimistic state was NOT saved.
+      // Surface it and reconcile with the server so we don't show ghost hands.
+      if (err instanceof Error && err.message.startsWith('push failed:')) {
+        setFileError('서버 저장에 실패했습니다 (세션 만료 등). 다시 시도해 주세요.');
+        try {
+          setStore(await fetchCoinPokerHands());
+        } catch {
+          /* reconcile failed too — keep optimistic so data isn't lost mid-session */
+        }
+      }
+      // Network/offline error → keep the optimistic local merge.
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const handleFileSelect = async (event: ChangeEvent<HTMLInputElement>) => {
-    const version = inputVersionRef.current + 1;
-    inputVersionRef.current = version;
-    setFileError(null);
-
     const file = event.target.files?.[0];
+    if (fileInputRef.current) fileInputRef.current.value = '';
     if (!file) return;
-
     try {
-      const text = await file.text();
-      if (inputVersionRef.current === version) {
-        setRawText(text);
-      }
+      await ingest(await file.text());
     } catch {
-      if (inputVersionRef.current === version) {
-        setFileError('파일을 읽지 못했습니다. 다시 선택해 주세요.');
-      }
+      setFileError('파일을 읽지 못했습니다. 다시 선택해 주세요.');
     }
   };
 
-  const handleClear = () => {
-    inputVersionRef.current += 1;
-    setRawText('');
-    setFileError(null);
-    setHoveredHand(null);
-    setPinnedHand(null);
-    setSelectedHandHistory(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
+  const handleAddDraft = async () => {
+    if (!draftText.trim()) return;
+    await ingest(draftText);
+    setDraftText('');
   };
 
-  const handleManualEdit = (event: ChangeEvent<HTMLTextAreaElement>) => {
-    inputVersionRef.current += 1;
-    setRawText(event.target.value);
-    setFileError(null);
-    setHoveredHand(null);
-    setPinnedHand(null);
-    setSelectedHandHistory(null);
+  const handleClearType = async () => {
+    if (!confirm(`${gameType === 'cash' ? 'Cash' : 'Tournament'} 누적 기록을 모두 삭제하시겠습니까?`)) return;
+    resetSelection();
+    setStore(prev => ({ ...prev, [gameType]: [] }));
+    try {
+      const next = await clearCoinPokerHands(gameType);
+      setStore(next);
+    } catch {
+      /* offline — local cleared regardless */
+    }
   };
 
   const handleGridClick = (hand: string) => {
@@ -107,6 +206,33 @@ export function CoinPokerAnalysisPage({ fallbackStack, data }: Props) {
     { label: '제외', value: summary.excluded, tone: 'text-gray-400' },
   ];
 
+  if (loading) {
+    const received = progress?.received ?? 0;
+    const pct = progress?.total ? Math.round((received / progress.total) * 100) : null;
+    const size = received < 1024 * 1024
+      ? `${(received / 1024).toFixed(1)} KB`
+      : `${(received / (1024 * 1024)).toFixed(1)} MB`;
+    return (
+      <div className="w-full max-w-7xl mx-auto px-3 sm:px-4">
+        <div className="mx-auto mt-16 flex max-w-sm flex-col items-center gap-4 rounded-lg border border-gray-800 bg-gray-950/30 p-8 text-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-700 border-t-indigo-500" />
+          <div className="text-sm font-medium text-gray-200">CoinPoker 기록 불러오는 중...</div>
+          <div className="w-full">
+            <div className="h-2 w-full overflow-hidden rounded-full bg-gray-800">
+              <div
+                className={`h-full rounded-full bg-indigo-500 transition-[width] duration-150 ${pct === null ? 'w-1/3 animate-pulse' : ''}`}
+                style={pct === null ? undefined : { width: `${pct}%` }}
+              />
+            </div>
+            <div className="mt-2 text-xs text-gray-500">
+              {pct === null ? `${size} 불러옴...` : `${pct}% · ${size}`}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full max-w-7xl mx-auto px-3 sm:px-4">
       <div className="flex flex-col gap-4">
@@ -115,7 +241,7 @@ export function CoinPokerAnalysisPage({ fallbackStack, data }: Props) {
             <div>
               <h2 className="text-lg sm:text-xl font-bold text-white">CoinPoker RFI 분석</h2>
               <p className="mt-1 text-xs text-gray-500">
-                Hero 스택에 가장 가까운 15BB/25BB/40BB/100BB 차트로 자동 비교합니다
+                업로드한 핸드는 계정에 누적 저장됩니다 (Cash / Tournament 분리, handId 기준 중복 제거)
               </p>
             </div>
 
@@ -125,17 +251,37 @@ export function CoinPokerAnalysisPage({ fallbackStack, data }: Props) {
                 type="file"
                 accept=".txt,text/plain"
                 onChange={handleFileSelect}
-                className="block w-full max-w-full text-xs text-gray-300 file:mr-3 file:rounded file:border-0 file:bg-indigo-600 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white hover:file:bg-indigo-500 sm:w-64"
+                disabled={busy}
+                className="block w-full max-w-full text-xs text-gray-300 file:mr-3 file:rounded file:border-0 file:bg-indigo-600 file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-white hover:file:bg-indigo-500 disabled:opacity-50 sm:w-64"
               />
               <button
                 type="button"
-                onClick={handleClear}
-                className="rounded bg-gray-800 px-3 py-1.5 text-xs font-semibold text-gray-200 transition-colors hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
-                disabled={isEmpty}
+                onClick={handleClearType}
+                className="rounded bg-red-900/50 px-3 py-1.5 text-xs font-semibold text-red-300 transition-colors hover:bg-red-900/70 disabled:cursor-not-allowed disabled:opacity-40"
+                disabled={busy || counts[gameType] === 0}
               >
-                Clear
+                {gameType === 'cash' ? 'Cash' : 'Tournament'} 비우기
               </button>
             </div>
+          </div>
+
+          {/* Game type tabs */}
+          <div className="flex gap-1 rounded-lg bg-gray-900/60 p-1">
+            {GAME_TYPE_TABS.map(tab => (
+              <button
+                key={tab.value}
+                type="button"
+                onClick={() => { setGameType(tab.value); resetSelection(); }}
+                className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  gameType === tab.value
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-gray-400 hover:bg-gray-800/60 hover:text-gray-200'
+                }`}
+              >
+                {tab.label}
+                <span className="ml-1.5 text-xs opacity-70">{counts[tab.value]}</span>
+              </button>
+            ))}
           </div>
 
           {fileError && (
@@ -144,26 +290,82 @@ export function CoinPokerAnalysisPage({ fallbackStack, data }: Props) {
             </div>
           )}
 
-          <textarea
-            value={rawText}
-            onChange={handleManualEdit}
-            spellCheck={false}
-            placeholder="CoinPoker hand history 텍스트를 붙여넣으세요"
-            className="min-h-44 w-full resize-y rounded-md border border-gray-800 bg-gray-900/70 p-3 font-mono text-xs leading-relaxed text-gray-200 outline-none placeholder:text-gray-600 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-          />
+          <div className="flex flex-col gap-2">
+            <textarea
+              value={draftText}
+              onChange={(e) => setDraftText(e.target.value)}
+              spellCheck={false}
+              placeholder="CoinPoker hand history 텍스트를 붙여넣고 '추가'를 누르면 누적됩니다"
+              className="min-h-32 w-full resize-y rounded-md border border-gray-800 bg-gray-900/70 p-3 font-mono text-xs leading-relaxed text-gray-200 outline-none placeholder:text-gray-600 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+            />
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleAddDraft}
+                disabled={busy || !draftText.trim()}
+                className="rounded bg-indigo-600 px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {busy ? '저장 중...' : '추가'}
+              </button>
+            </div>
+          </div>
         </div>
 
         {isEmpty ? (
           <div className="rounded-lg border border-dashed border-gray-800 bg-gray-950/30 px-4 py-8 text-center text-sm text-gray-500">
-            txt 파일을 선택하거나 로그를 붙여넣으면 분석이 시작됩니다.
+            {`${gameType === 'cash' ? 'Cash' : 'Tournament'} 누적 기록이 없습니다. txt 파일을 올리거나 로그를 붙여넣어 추가하세요.`}
           </div>
         ) : (
           <>
-            {hasUnparsedText && (
-              <div className="rounded-md border border-amber-500/30 bg-amber-950/30 px-3 py-2 text-sm text-amber-200">
-                Dealt to Hero [...] entries were not found. CoinPoker 핸드 히스토리 형식을 확인해 주세요.
-              </div>
+            {gameType === 'tournament' && (
+              <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-800 bg-gray-950/20 p-3 text-xs text-gray-300">
+                <input
+                  type="checkbox"
+                  checked={excludeShortStack}
+                  onChange={(e) => setExcludeShortStack(e.target.checked)}
+                  className="h-4 w-4 accent-indigo-500"
+                />
+                <span>유효스택 10BB 이하 제외</span>
+                <span className="text-gray-500">
+                  (상대·나 중 짧은 스택 기준
+                  {excludeShortStack && shortStackExcludedCount > 0 ? ` · ${shortStackExcludedCount}핸드 제외됨` : ''})
+                </span>
+              </label>
             )}
+
+            <div className="flex flex-col gap-2 rounded-lg border border-gray-800 bg-gray-950/20 p-3 sm:flex-row sm:items-center sm:gap-4">
+              <div className="flex items-center gap-2 whitespace-nowrap text-xs text-gray-400">
+                <span>차트에 그릴 핸드 (최신순)</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={totalHands}
+                  value={effectiveLimit}
+                  onChange={(e) =>
+                    setChartLimit(Math.max(1, Math.min(totalHands, Number(e.target.value) || 1)))
+                  }
+                  className="w-20 rounded border border-gray-700 bg-gray-900 px-2 py-1 text-gray-200 outline-none focus:border-indigo-500"
+                />
+                <span className="text-gray-500">/ 전체 {totalHands}</span>
+              </div>
+              <input
+                type="range"
+                min={1}
+                max={Math.max(1, totalHands)}
+                value={effectiveLimit}
+                onChange={(e) => setChartLimit(Number(e.target.value))}
+                className="w-full flex-1 accent-indigo-500"
+                aria-label="차트에 그릴 최신 핸드 수"
+              />
+              <button
+                type="button"
+                onClick={() => setChartLimit(Number.MAX_SAFE_INTEGER)}
+                disabled={effectiveLimit >= totalHands}
+                className="shrink-0 rounded bg-gray-800 px-2.5 py-1 text-xs font-medium text-gray-300 transition-colors hover:bg-gray-700 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                전체
+              </button>
+            </div>
 
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
               {summaryItems.map((item) => (

@@ -1,5 +1,7 @@
 export type CoinPokerPosition = 'UTG' | 'LJ' | 'HJ' | 'CO' | 'BTN' | 'SB' | 'BB' | 'UNKNOWN';
 
+export type CoinPokerGameType = 'cash' | 'tournament';
+
 export interface CoinPokerAction {
   player: string;
   position?: CoinPokerPosition;
@@ -9,6 +11,7 @@ export interface CoinPokerAction {
 
 export interface CoinPokerHand {
   handId: string;
+  gameType: CoinPokerGameType;
   rawText: string;
   startedAt: string;
   smallBlind: number;
@@ -19,6 +22,10 @@ export interface CoinPokerHand {
   heroSeat: number | null;
   heroStack: number | null;
   heroStackBb: number | null;
+  /** Smallest opponent stack in BB (null if no opponents parsed). */
+  minVillainStackBb?: number | null;
+  /** Effective stack in BB = min(hero, smallest opponent). Used by tournament filters. */
+  effectiveStackBb?: number | null;
   heroPosition: CoinPokerPosition;
   heroCards: string[];
   heroHand: string | null;
@@ -86,7 +93,7 @@ function parseHandBlock(block: string): CoinPokerHand | null {
   const header = block.match(
     new RegExp(`^CoinPoker Hand #(\\d+):\\s+NLH\\s+\\((${AMOUNT_PATTERN})\\/(${AMOUNT_PATTERN})(?:\\/(${AMOUNT_PATTERN}))?\\)\\s+(.+)$`, 'm'),
   );
-  const table = block.match(/^(?:Table|Tournament)\s+.+?\s+(\d+)-max Seat #(\d+) is the button$/m);
+  const table = block.match(/^(Table|Tournament)\s+.+?\s+(\d+)-max Seat #(\d+) is the button$/m);
   const heroCardsMatch = block.match(/^Dealt to Hero \[([^\]]+)\]$/m);
 
   if (!header || !table || !heroCardsMatch) return null;
@@ -101,18 +108,24 @@ function parseHandBlock(block: string): CoinPokerHand | null {
   const smallBlind = parseAmount(header[2]);
   const bigBlind = parseAmount(header[3]);
   const ante = header[4] ? parseAmount(header[4]) : 0;
-  const tableSize = Number(table[1]);
-  const buttonSeat = Number(table[2]);
+  const gameType: CoinPokerGameType = table[1] === 'Tournament' ? 'tournament' : 'cash';
+  const tableSize = Number(table[2]);
+  const buttonSeat = Number(table[3]);
   const blindSeats = parseBlindSeats(block, seats);
   const positionByPlayer = buildPositionByPlayer(seats, buttonSeat, blindSeats);
   const heroPosition = positionByPlayer.get('Hero') ?? 'UNKNOWN';
   const preflopActions = parsePreflopActions(block, positionByPlayer);
   const heroFirstAction = preflopActions.find((action) => action.player === 'Hero')?.action ?? null;
   const heroStackBb = roundToTwo(heroSeatInfo.stack / bigBlind);
+  const villainChips = seats.filter((seat) => seat.player !== 'Hero').map((seat) => seat.stack);
+  const minVillainStackBb = villainChips.length ? roundToTwo(Math.min(...villainChips) / bigBlind) : null;
+  const effectiveChips = villainChips.length ? Math.min(heroSeatInfo.stack, ...villainChips) : heroSeatInfo.stack;
+  const effectiveStackBb = roundToTwo(effectiveChips / bigBlind);
   const exclusionReason = getExclusionReason(preflopActions, heroFirstAction, heroPosition);
 
   return {
     handId: header[1],
+    gameType,
     rawText: block,
     startedAt: header[5],
     smallBlind,
@@ -123,6 +136,8 @@ function parseHandBlock(block: string): CoinPokerHand | null {
     heroSeat: heroSeatInfo.seat,
     heroStack: heroSeatInfo.stack,
     heroStackBb,
+    minVillainStackBb,
+    effectiveStackBb,
     heroPosition,
     heroCards,
     heroHand,

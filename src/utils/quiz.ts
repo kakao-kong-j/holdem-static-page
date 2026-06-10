@@ -201,6 +201,11 @@ export function clearQuizRecords(): void {
   localStorage.removeItem(STORAGE_KEY);
 }
 
+/** Overwrite the local store with the given records (used by remote sync). */
+export function replaceQuizRecords(records: QuizRecord[]): void {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+}
+
 export function exportRecords(): void {
   const records = loadQuizRecords();
   const blob = new Blob([JSON.stringify(records, null, 2)], { type: 'application/json' });

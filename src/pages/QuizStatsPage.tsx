@@ -10,6 +10,7 @@ import {
   importRecords,
   actionLabel,
 } from '../utils/quiz';
+import { pushQuizRecords, replaceRemoteRecords } from '../utils/recordsSync';
 import { computeDeviationStats } from '../utils/stats';
 import { HexagonRadar, type HexagonAxis } from '../components/HexagonRadar';
 import { ErrorDonut } from '../components/ErrorDonut';
@@ -631,7 +632,9 @@ export function QuizStatsPage({ data, onNavigate }: QuizStatsPageProps) {
     if (!file) return;
     try {
       const count = await importRecords(file);
-      setRecords(loadQuizRecords());
+      const next = loadQuizRecords();
+      setRecords(next);
+      pushQuizRecords(next).catch(() => { /* offline — local import still applied */ });
       alert(`${count}개의 새 기록을 가져왔습니다`);
     } catch (err) {
       alert((err as Error).message);
@@ -643,6 +646,7 @@ export function QuizStatsPage({ data, onNavigate }: QuizStatsPageProps) {
     if (!confirm('모든 퀴즈 기록을 삭제하시겠습니까?')) return;
     clearQuizRecords();
     setRecords([]);
+    replaceRemoteRecords([]).catch(() => { /* offline — local cleared regardless */ });
   };
 
   const pct = (correct: number, total: number) =>

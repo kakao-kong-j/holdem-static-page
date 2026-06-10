@@ -11,6 +11,7 @@ node_modules
 dist
 dist-ssr
 *.local
+*.local.*
 
 # Sensitive data
 public/gto-preflop-charts-all.json
@@ -26,3 +27,6 @@ public/gto-preflop-charts-all.json
 *.sln
 *.sw?
 .gstack/
+.vercel
+.env*
+!.env.example
