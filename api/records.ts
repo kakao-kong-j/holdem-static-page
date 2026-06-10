@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { head, put } from '@vercel/blob';
-import { getSessionUser } from './_lib/session';
+import { getSessionUser } from './_lib/session.js';
 
 /** Minimal shape we rely on for merging; the full QuizRecord lives in the frontend. */
 interface StoredRecord {
