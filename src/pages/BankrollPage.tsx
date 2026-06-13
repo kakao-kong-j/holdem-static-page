@@ -4,6 +4,8 @@ import {
   dedupeSessions,
   computeTrend,
   computeTagPerformance,
+  filterByDateRange,
+  dateBounds,
   summarize,
   formatUsd,
   type BankrollSession,
@@ -16,15 +18,22 @@ export function BankrollPage() {
   const [sessions, setSessions] = useState<BankrollSession[]>([]);
   const [rate, setRate] = useState<number | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     fetchUsdKrwRate().then(setRate).catch(() => {});
   }, []);
 
-  const trend = useMemo(() => computeTrend(sessions), [sessions]);
-  const tags = useMemo(() => computeTagPerformance(sessions), [sessions]);
-  const sum = useMemo(() => summarize(sessions), [sessions]);
+  const bounds = useMemo(() => dateBounds(sessions), [sessions]);
+  const filtered = useMemo(
+    () => filterByDateRange(sessions, from, to),
+    [sessions, from, to],
+  );
+  const trend = useMemo(() => computeTrend(filtered), [filtered]);
+  const tags = useMemo(() => computeTagPerformance(filtered), [filtered]);
+  const sum = useMemo(() => summarize(filtered), [filtered]);
 
   async function onFiles(e: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
@@ -77,6 +86,43 @@ export function BankrollPage() {
           </>
         )}
       </div>
+
+      {/* date range filter */}
+      {hasData && (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-gray-300">
+          <span className="text-gray-500">기간</span>
+          <input
+            type="date"
+            value={from}
+            min={bounds?.min}
+            max={to || bounds?.max}
+            onChange={(e) => setFrom(e.target.value)}
+            className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-gray-200 [color-scheme:dark]"
+          />
+          <span className="text-gray-500">~</span>
+          <input
+            type="date"
+            value={to}
+            min={from || bounds?.min}
+            max={bounds?.max}
+            onChange={(e) => setTo(e.target.value)}
+            className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-gray-200 [color-scheme:dark]"
+          />
+          {(from || to) && (
+            <button
+              onClick={() => { setFrom(''); setTo(''); }}
+              className="px-2.5 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-gray-400 hover:text-gray-200 transition-colors"
+            >
+              초기화
+            </button>
+          )}
+          {(from || to) && (
+            <span className="text-gray-500">
+              {filtered.length} / {sessions.length} 세션
+            </span>
+          )}
+        </div>
+      )}
 
       {fileError && <p className="text-sm text-red-400">{fileError}</p>}
 

@@ -117,6 +117,38 @@ export interface Summary {
   sessionCount: number;
 }
 
+/**
+ * Filter sessions by an inclusive date range (YYYY-MM-DD strings).
+ * Empty `from`/`to` means that bound is open. Compares on the date part of
+ * `datetime` ('YYYY-MM-DD HH:mm:ss').
+ */
+export function filterByDateRange(
+  sessions: BankrollSession[],
+  from: string,
+  to: string,
+): BankrollSession[] {
+  if (!from && !to) return sessions;
+  return sessions.filter((s) => {
+    const d = s.datetime.slice(0, 10);
+    if (from && d < from) return false;
+    if (to && d > to) return false;
+    return true;
+  });
+}
+
+/** Earliest/latest date (YYYY-MM-DD) across sessions, or null if empty. */
+export function dateBounds(sessions: BankrollSession[]): { min: string; max: string } | null {
+  if (sessions.length === 0) return null;
+  let min = sessions[0].datetime.slice(0, 10);
+  let max = min;
+  for (const s of sessions) {
+    const d = s.datetime.slice(0, 10);
+    if (d < min) min = d;
+    if (d > max) max = d;
+  }
+  return { min, max };
+}
+
 export function computeTrend(sessions: BankrollSession[]): TrendPoint[] {
   const sorted = [...sessions].sort((a, b) => a.datetime.localeCompare(b.datetime));
   let acc = 0;

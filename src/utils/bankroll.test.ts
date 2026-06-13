@@ -5,6 +5,8 @@ import {
   dedupeSessions,
   parseBankrollFile,
   computeTrend,
+  filterByDateRange,
+  dateBounds,
   computeTagPerformance,
   summarize,
   formatUsd,
@@ -79,6 +81,28 @@ describe('computeTrend', () => {
     const last = pts[pts.length - 1].value;
     const sum = all.reduce((a, s) => a + s.profit, 0);
     expect(last).toBeCloseTo(sum, 5);
+  });
+});
+
+describe('filterByDateRange', () => {
+  it('returns all when both bounds empty', () => {
+    expect(filterByDateRange(all, '', '')).toHaveLength(all.length);
+  });
+  it('filters inclusively by date part', () => {
+    // cash c1 (06-06), c2 (06-09), c3 (06-06); tour t1 (06-07), t2 (06-11)
+    expect(filterByDateRange(all, '2026-06-07', '2026-06-09').map(s => s.id).sort())
+      .toEqual(['c2', 't1']);
+    expect(filterByDateRange(all, '2026-06-09', '').map(s => s.id).sort())
+      .toEqual(['c2', 't2']);
+    expect(filterByDateRange(all, '', '2026-06-06').map(s => s.id).sort())
+      .toEqual(['c1', 'c3']);
+  });
+});
+
+describe('dateBounds', () => {
+  it('returns min/max date or null', () => {
+    expect(dateBounds(all)).toEqual({ min: '2026-06-06', max: '2026-06-11' });
+    expect(dateBounds([])).toBeNull();
   });
 });
 
