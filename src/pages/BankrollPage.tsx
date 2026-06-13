@@ -27,6 +27,7 @@ export function BankrollPage() {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [syncing, setSyncing] = useState(false);
+  const [loading, setLoading] = useState(true);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -35,9 +36,12 @@ export function BankrollPage() {
 
   // Seed from the server-side store on mount (no-op offline / no /api).
   useEffect(() => {
+    let cancelled = false;
     fetchBankrollSessions()
-      .then((store) => setSessions(dedupeSessions(flattenStore(store))))
-      .catch(() => {});
+      .then((store) => { if (!cancelled) setSessions(dedupeSessions(flattenStore(store))); })
+      .catch(() => { /* offline / no /api — start empty */ })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, []);
 
   const bounds = useMemo(() => dateBounds(sessions), [sessions]);
@@ -99,6 +103,18 @@ export function BankrollPage() {
   }
 
   const hasData = sessions.length > 0;
+
+  if (loading) {
+    return (
+      <div className="mx-auto mt-16 flex max-w-sm flex-col items-center gap-4 rounded-xl border border-gray-800 bg-gray-950/30 p-8 text-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-700 border-t-indigo-500" />
+        <div className="text-sm font-medium text-gray-200">저장된 뱅크롤 불러오는 중...</div>
+        <div className="h-2 w-full overflow-hidden rounded-full bg-gray-800">
+          <div className="h-full w-1/3 animate-pulse rounded-full bg-indigo-500" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
