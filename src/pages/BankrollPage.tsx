@@ -11,6 +11,12 @@ import {
   type BankrollSession,
 } from '../utils/bankroll';
 import { fetchUsdKrwRate } from '../utils/fxRate';
+import {
+  fetchBankrollSessions,
+  pushBankrollSessions,
+  clearBankroll,
+  flattenStore,
+} from '../utils/bankrollSync';
 import { BankrollTrendChart } from '../components/BankrollTrendChart';
 import { TagPerformanceChart } from '../components/TagPerformanceChart';
 
@@ -20,10 +26,18 @@ export function BankrollPage() {
   const [fileError, setFileError] = useState<string | null>(null);
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
+  const [syncing, setSyncing] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     fetchUsdKrwRate().then(setRate).catch(() => {});
+  }, []);
+
+  // Seed from the server-side store on mount (no-op offline / no /api).
+  useEffect(() => {
+    fetchBankrollSessions()
+      .then((store) => setSessions(dedupeSessions(flattenStore(store))))
+      .catch(() => {});
   }, []);
 
   const bounds = useMemo(() => dateBounds(sessions), [sessions]);
@@ -51,9 +65,37 @@ export function BankrollPage() {
         errors.push(`${f.name}: JSON 파싱 실패`);
       }
     }
-    setSessions((prev) => dedupeSessions([...prev, ...added]));
-    if (errors.length) setFileError(errors.join(' / '));
     if (inputRef.current) inputRef.current.value = '';
+    if (errors.length) setFileError(errors.join(' / '));
+    if (added.length === 0) return;
+
+    // Optimistic local merge for instant feedback.
+    setSessions((prev) => dedupeSessions([...prev, ...added]));
+    // Persist to Vercel Blob; adopt the server-merged union (dedupe by id).
+    setSyncing(true);
+    try {
+      const store = await pushBankrollSessions(added);
+      setSessions(dedupeSessions(flattenStore(store)));
+    } catch {
+      /* offline / no /api — keep the optimistic local state */
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  async function onClearAll() {
+    if (!confirm('저장된 모든 뱅크롤 데이터를 삭제할까요?')) return;
+    setSessions([]);
+    setFrom('');
+    setTo('');
+    setSyncing(true);
+    try {
+      await clearBankroll('all');
+    } catch {
+      /* offline / no /api — local state already cleared */
+    } finally {
+      setSyncing(false);
+    }
   }
 
   const hasData = sessions.length > 0;
@@ -70,6 +112,15 @@ export function BankrollPage() {
         </button>
         <input ref={inputRef} type="file" accept=".json,application/json" multiple
           onChange={onFiles} className="hidden" />
+        {hasData && (
+          <button
+            onClick={onClearAll}
+            className="px-3 py-2 text-sm bg-gray-800 text-gray-300 rounded-lg border border-gray-700 hover:text-white hover:border-gray-600 transition-colors"
+          >
+            전체 삭제
+          </button>
+        )}
+        {syncing && <span className="text-xs text-indigo-300">동기화 중…</span>}
         {hasData && (
           <>
             <span className="px-3 py-1.5 text-xs bg-gray-800 text-gray-200 rounded-lg border border-gray-700">
