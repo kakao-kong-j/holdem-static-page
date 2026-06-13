@@ -10,10 +10,11 @@ import { FacingPage } from './pages/FacingPage';
 import { QuizPage } from './pages/QuizPage';
 import { QuizStatsPage } from './pages/QuizStatsPage';
 import { CoinPokerAnalysisPage } from './pages/CoinPokerAnalysisPage';
+import { BankrollPage } from './pages/BankrollPage';
 import { EquityCalculatorPage } from './pages/EquityCalculatorPage';
 import type { StackSize, QuizQuestion } from './types';
 
-type View = 'open-range' | 'sb-open' | 'facing' | 'quiz' | 'quiz-stats' | 'coinpoker' | 'equity';
+type View = 'open-range' | 'sb-open' | 'facing' | 'quiz' | 'quiz-stats' | 'coinpoker' | 'bankroll' | 'equity';
 
 export type NavigateIntent =
   | { kind: 'chart'; stack: StackSize; chartName: string; viewType: 'open-range' | 'sb-open' | 'facing' }
@@ -27,6 +28,7 @@ const VIEWS: { value: View; label: string }[] = [
   { value: 'quiz', label: '퀴즈' },
   { value: 'quiz-stats', label: '통계' },
   { value: 'coinpoker', label: 'CoinPoker 분석' },
+  { value: 'bankroll', label: '뱅크롤' },
   { value: 'equity', label: '에쿼티 계산기' },
 ];
 
@@ -107,7 +109,7 @@ function App() {
   const currentLabel = VIEWS.find(v => v.value === view)?.label ?? '';
 
   return (
-    <div className={`min-h-screen ${view === 'coinpoker' ? 'max-w-7xl' : 'max-w-4xl'} mx-auto`}>
+    <div className={`min-h-screen ${view === 'coinpoker' || view === 'bankroll' ? 'max-w-7xl' : 'max-w-4xl'} mx-auto`}>
       {/* Sidebar Drawer Overlay */}
       {drawerOpen && (
         <div
@@ -185,7 +187,7 @@ function App() {
 
       {/* Main Content */}
       <div className="p-4">
-        {view !== 'quiz' && view !== 'quiz-stats' && view !== 'coinpoker' && view !== 'equity' && (
+        {view !== 'quiz' && view !== 'quiz-stats' && view !== 'coinpoker' && view !== 'bankroll' && view !== 'equity' && (
           <div className="flex justify-center mb-4">
             <StackTabs
               selected={stack}
@@ -201,6 +203,7 @@ function App() {
         {view === 'quiz' && <QuizPage data={data} />}
         {view === 'quiz-stats' && <QuizStatsPage data={data} onNavigate={navigate} />}
         {view === 'coinpoker' && <CoinPokerAnalysisPage fallbackStack={stack} data={data} />}
+        {view === 'bankroll' && <BankrollPage />}
         {view === 'equity' && <EquityCalculatorPage />}
       </div>
     </div>
