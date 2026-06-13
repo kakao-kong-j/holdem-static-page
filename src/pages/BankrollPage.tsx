@@ -106,7 +106,8 @@ export function BankrollPage() {
       <div className="flex flex-wrap items-center gap-2">
         <button
           onClick={() => inputRef.current?.click()}
-          className="px-3 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition-colors"
+          disabled={syncing}
+          className="px-3 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           JSON 추가
         </button>
@@ -115,7 +116,8 @@ export function BankrollPage() {
         {hasData && (
           <button
             onClick={onClearAll}
-            className="px-3 py-2 text-sm bg-gray-800 text-gray-300 rounded-lg border border-gray-700 hover:text-white hover:border-gray-600 transition-colors"
+            disabled={syncing}
+            className="px-3 py-2 text-sm bg-gray-800 text-gray-300 rounded-lg border border-gray-700 hover:text-white hover:border-gray-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             전체 삭제
           </button>

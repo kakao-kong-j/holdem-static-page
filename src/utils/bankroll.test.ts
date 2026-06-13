@@ -44,6 +44,26 @@ describe('normalizeTournamentSessions', () => {
     expect(out.find(s => s.id === 't2')!.profit).toBeCloseTo(-3.6, 5);
     expect(out.find(s => s.id === 't1')!.tags).toEqual(['CoinPoker', 'Tournament History']);
   });
+
+  it('falls back to 1 entry when total_no_of_entries is 0', () => {
+    const out = normalizeTournamentSessions([
+      { tournament_id: 'z', tournament_name: 'z', minigames_type_id: 1, start_datetime: '2026-06-07 06:05:00', internal_ref: 'i', buy_in: '1.10', win_loss: '0.00', total_no_of_entries: 0 },
+    ]);
+    expect(out[0].profit).toBeCloseTo(-1.1, 5);
+  });
+});
+
+describe('id validation', () => {
+  it('drops rows missing the dedupe key', () => {
+    const cashBad = normalizeCashSessions([
+      { game_type: "Texas Hold'em", minigames_type_id: 1, internal_ref: '', start_datetime: '2026-06-06 11:07:33', buy_in: '0.8', win_loss: '0.10' },
+    ] as RawCash[]);
+    expect(cashBad).toHaveLength(0);
+    const tourBad = normalizeTournamentSessions([
+      { tournament_name: 'x', minigames_type_id: 1, start_datetime: '2026-06-07 06:05:00', internal_ref: 'i', buy_in: '1.10', win_loss: '0.00', total_no_of_entries: 1 },
+    ] as unknown as RawTournament[]);
+    expect(tourBad).toHaveLength(0);
+  });
 });
 
 describe('dedupeSessions', () => {

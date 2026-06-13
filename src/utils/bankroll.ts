@@ -55,7 +55,9 @@ export function cashGameTag(gameType: string, typeId: number): string | null {
 }
 
 export function normalizeCashSessions(rows: RawCash[]): BankrollSession[] {
-  return rows.map((r) => {
+  return rows
+    .filter((r) => typeof r?.internal_ref === 'string' && r.internal_ref.length > 0)
+    .map((r) => {
     const tags = ['CoinPoker', 'Cash History'];
     const t = cashGameTag(r.game_type, r.minigames_type_id);
     if (t) tags.push(t);
@@ -72,9 +74,12 @@ export function normalizeCashSessions(rows: RawCash[]): BankrollSession[] {
 }
 
 export function normalizeTournamentSessions(rows: RawTournament[]): BankrollSession[] {
-  return rows.map((r) => {
+  return rows
+    .filter((r) => typeof r?.tournament_id === 'string' && r.tournament_id.length > 0)
+    .map((r) => {
     const buyIn = num(r.buy_in);
-    const entries = r.total_no_of_entries ?? 1;
+    // `?? 1` would miss a literal 0 (malformed/partial export) → buyIn*0 = 0 cost.
+    const entries = r.total_no_of_entries > 0 ? r.total_no_of_entries : 1;
     const winLoss = num(r.win_loss);
     return {
       id: r.tournament_id,

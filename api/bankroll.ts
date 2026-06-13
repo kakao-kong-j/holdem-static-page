@@ -98,12 +98,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const body = (req.body ?? {}) as { sessions?: unknown; clear?: unknown };
 
     if (body.clear === 'cash' || body.clear === 'tournament' || body.clear === 'all') {
+      // Return the post-clear state directly. Re-reading via head() right after
+      // del() can hit Blob's eventual consistency and resurrect deleted data,
+      // so we only re-read the type that was NOT cleared.
       if (body.clear === 'all') {
         await Promise.all([clearKind(sub, 'cash'), clearKind(sub, 'tournament')]);
-      } else {
-        await clearKind(sub, body.clear);
+        res.status(200).json({ cash: [], tournament: [] });
+        return;
       }
-      res.status(200).json(await readBoth(sub));
+      await clearKind(sub, body.clear);
+      const other = body.clear === 'cash' ? 'tournament' : 'cash';
+      const otherSessions = await readSessions(blobPath(sub, other));
+      res.status(200).json({
+        cash: body.clear === 'cash' ? [] : otherSessions,
+        tournament: body.clear === 'tournament' ? [] : otherSessions,
+      });
       return;
     }
 
