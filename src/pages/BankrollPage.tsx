@@ -12,6 +12,7 @@ import {
   recalculateSessionProfit,
   hasMissingTicketPrice,
   extractTicketPrices,
+  findTicketPrice,
   type BankrollSession,
   type RawTournament,
 } from '../utils/bankroll';
@@ -468,7 +469,7 @@ function collectTicketPrices(
       typeof row?.tournament_id === 'string' &&
       row.tournament_id.length > 0 &&
       isTicketValue(row.is_ticket) &&
-      knownTicketPrices[row.tournament_id] === undefined &&
+      findTicketPrice(row.tournament_id, row.tournament_name, knownTicketPrices) === null &&
       !ticketRows.has(row.tournament_id)
     ) {
       ticketRows.set(row.tournament_id, row);

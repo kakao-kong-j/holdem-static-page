@@ -25,8 +25,10 @@ export interface RawTournament {
 
 interface RawTicketExport {
   ticketAmount?: unknown;
+  title?: unknown;
+  sourceName?: unknown;
   selectedEligibleTournamentId?: unknown;
-  eligibleTournaments?: Array<{ tourneyId?: unknown }>;
+  eligibleTournaments?: Array<{ tourneyId?: unknown; tourneyName?: unknown }>;
 }
 
 export interface BankrollSession {
@@ -63,9 +65,21 @@ export function isTicketValue(v: unknown): boolean {
   return false;
 }
 
-function ticketPriceFor(id: string, options?: BankrollParseOptions): number | null {
-  const price = options?.ticketPrices?.[id];
-  return typeof price === 'number' && Number.isFinite(price) && price >= 0 ? price : null;
+export function findTicketPrice(
+  id: string,
+  name: string,
+  ticketPrices: Record<string, number> = {},
+): number | null {
+  const keys = [
+    id,
+    ticketNameKey(name),
+    tournamentDestinationKey(name),
+  ];
+  for (const key of keys) {
+    const price = ticketPrices[key];
+    if (typeof price === 'number' && Number.isFinite(price) && price >= 0) return price;
+  }
+  return null;
 }
 
 export function extractTicketPrices(parsed: unknown): Record<string, number> {
@@ -87,8 +101,38 @@ export function extractTicketPrices(parsed: unknown): Record<string, number> {
       if (id === undefined || id === null || id === '') continue;
       prices[String(id)] = ticketAmount;
     }
+
+    const names = [
+      raw.title,
+      raw.sourceName,
+      ...(Array.isArray(raw.eligibleTournaments)
+        ? raw.eligibleTournaments.map((t) => t?.tourneyName)
+        : []),
+    ];
+    for (const name of names) {
+      if (typeof name !== 'string' || name.trim() === '') continue;
+      prices[ticketNameKey(name)] = ticketAmount;
+      prices[tournamentDestinationKey(name)] = ticketAmount;
+    }
   }
   return prices;
+}
+
+function ticketNameKey(name: string): string {
+  return `name:${normalizeTicketName(name)}`;
+}
+
+function tournamentDestinationKey(name: string): string {
+  const normalized = normalizeTicketName(name);
+  const toIndex = normalized.lastIndexOf(' to ');
+  return `dest:${toIndex === -1 ? normalized : normalized.slice(toIndex + 4)}`;
+}
+
+function normalizeTicketName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /** Cash game-type → tag. id first, game_type string fallback. */
@@ -132,7 +176,7 @@ export function normalizeTournamentSessions(
     .map((r) => {
     const id = r.tournament_id;
     const isTicket = isTicketValue(r.is_ticket);
-    const ticketPrice = isTicket ? ticketPriceFor(id, options) : null;
+    const ticketPrice = isTicket ? findTicketPrice(id, r.tournament_name, options?.ticketPrices) : null;
     const buyIn = ticketPrice ?? num(r.buy_in);
     // `?? 1` would miss a literal 0 (malformed/partial export) → buyIn*0 = 0 cost.
     const entries = r.total_no_of_entries > 0 ? r.total_no_of_entries : 1;

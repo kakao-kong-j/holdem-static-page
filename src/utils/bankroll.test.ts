@@ -13,6 +13,7 @@ import {
   recalculateSessionProfit,
   hasMissingTicketPrice,
   extractTicketPrices,
+  findTicketPrice,
   type RawCash,
   type RawTournament,
 } from './bankroll';
@@ -125,12 +126,26 @@ describe('extractTicketPrices', () => {
       },
     ]);
 
-    expect(prices).toEqual({ '63886': 1.1 });
+    expect(prices).toMatchObject({
+      '63886': 1.1,
+      'name:step [2] to ₮109 coinmasters pepe': 1.1,
+      'dest:₮109 coinmasters pepe': 1.1,
+    });
   });
 
   it('returns an empty map for non-ticket exports', () => {
     expect(extractTicketPrices(tourneys)).toEqual({});
     expect(extractTicketPrices(cash)).toEqual({});
+  });
+});
+
+describe('findTicketPrice', () => {
+  it('finds ticket prices by destination name when tournament ids differ', () => {
+    const ticketPrices = extractTicketPrices([
+      { ticketAmount: 11, selectedEligibleTournamentId: 67361, title: '20 Seats to ₮109 CoinMasters PENGU' },
+    ]);
+
+    expect(findTicketPrice('67362', 'Step [2] to ₮109 CoinMasters PENGU', ticketPrices)).toBeCloseTo(11, 5);
   });
 });
 
@@ -145,6 +160,19 @@ describe('parseBankrollFile with ticket export prices', () => {
 
     expect(out[0].ticketPrice).toBeCloseTo(1.1, 5);
     expect(out[0].profit).toBeCloseTo(10.9, 5);
+    expect(hasMissingTicketPrice(out[0])).toBe(false);
+  });
+
+  it('matches ticket exports to ticket tournaments by destination name when ids differ', () => {
+    const ticketPrices = extractTicketPrices([
+      { ticketAmount: 11, selectedEligibleTournamentId: 67361, title: '20 Seats to ₮109 CoinMasters PENGU' },
+    ]);
+    const out = parseBankrollFile([
+      { tournament_id: '67362', tournament_name: 'Step [2] to ₮109 CoinMasters PENGU', minigames_type_id: 1, start_datetime: '2026-06-16 15:05:00', internal_ref: 'r-ticket', buy_in: '1.10', win_loss: '0.00', total_no_of_entries: 1, is_ticket: true },
+    ], { ticketPrices });
+
+    expect(out[0].ticketPrice).toBeCloseTo(11, 5);
+    expect(out[0].profit).toBeCloseTo(-11, 5);
     expect(hasMissingTicketPrice(out[0])).toBe(false);
   });
 });
