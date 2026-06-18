@@ -44,6 +44,21 @@ export async function pushBankrollSessions(sessions: BankrollSession[]): Promise
   return normalize(await res.json());
 }
 
+/** Replace one stored session list exactly; used after deleting records. */
+export async function replaceBankrollSessions(
+  kind: 'cash' | 'tournament',
+  sessions: BankrollSession[],
+): Promise<BankrollStore> {
+  const res = await fetch(ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ replace: kind, sessions }),
+  });
+  if (!res.ok) throw new Error(`replace failed: ${res.status}`);
+  return normalize(await res.json());
+}
+
 /** Delete the stored sessions for one type (or all). Returns the new store. */
 export async function clearBankroll(kind: 'cash' | 'tournament' | 'all'): Promise<BankrollStore> {
   const res = await fetch(ENDPOINT, {

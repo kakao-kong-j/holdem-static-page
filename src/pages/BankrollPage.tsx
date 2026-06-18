@@ -8,12 +8,17 @@ import {
   dateBounds,
   summarize,
   formatUsd,
+  isTicketValue,
+  recalculateSessionProfit,
+  hasMissingTicketPrice,
   type BankrollSession,
+  type RawTournament,
 } from '../utils/bankroll';
 import { fetchUsdKrwRate } from '../utils/fxRate';
 import {
   fetchBankrollSessions,
   pushBankrollSessions,
+  replaceBankrollSessions,
   clearBankroll,
   flattenStore,
 } from '../utils/bankrollSync';
@@ -28,6 +33,8 @@ export function BankrollPage() {
   const [to, setTo] = useState('');
   const [syncing, setSyncing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<SessionDraft | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -52,6 +59,10 @@ export function BankrollPage() {
   const trend = useMemo(() => computeTrend(filtered), [filtered]);
   const tags = useMemo(() => computeTagPerformance(filtered), [filtered]);
   const sum = useMemo(() => summarize(filtered), [filtered]);
+  const listedSessions = useMemo(
+    () => [...filtered].sort((a, b) => b.datetime.localeCompare(a.datetime)),
+    [filtered],
+  );
 
   async function onFiles(e: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
@@ -62,11 +73,17 @@ export function BankrollPage() {
     for (const f of files) {
       try {
         const parsed = JSON.parse(await f.text());
-        const got = parseBankrollFile(parsed);
+        const ticketPrices = collectTicketPrices(parsed);
+        if (ticketPrices === null) {
+          errors.push(`${f.name}: 티켓 가격 입력 취소`);
+          continue;
+        }
+        const got = parseBankrollFile(parsed, { ticketPrices });
         if (got.length === 0) errors.push(`${f.name}: 인식 가능한 항목 없음`);
         added.push(...got);
-      } catch {
-        errors.push(`${f.name}: JSON 파싱 실패`);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'JSON 파싱 실패';
+        errors.push(`${f.name}: ${message}`);
       }
     }
     if (inputRef.current) inputRef.current.value = '';
@@ -97,6 +114,57 @@ export function BankrollPage() {
       await clearBankroll('all');
     } catch {
       /* offline / no /api — local state already cleared */
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  function startEdit(session: BankrollSession) {
+    setEditingId(session.id);
+    setDraft(sessionToDraft(session));
+    setFileError(null);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setDraft(null);
+  }
+
+  async function saveEdit(original: BankrollSession) {
+    if (!draft) return;
+    const parsed = draftToSession(original, draft);
+    if (!parsed.ok) {
+      setFileError(parsed.error);
+      return;
+    }
+
+    const updated = recalculateSessionProfit(parsed.session);
+    setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+    setEditingId(null);
+    setDraft(null);
+    setSyncing(true);
+    try {
+      const store = await pushBankrollSessions([updated]);
+      setSessions(dedupeSessions(flattenStore(store)));
+    } catch {
+      /* offline / no /api — keep the optimistic local state */
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  async function deleteSession(session: BankrollSession) {
+    if (!confirm(`이 기록을 삭제할까요?\n${session.name || session.id}`)) return;
+    const remaining = sessions.filter((s) => s.id !== session.id);
+    const remainingKind = remaining.filter((s) => s.kind === session.kind);
+    setSessions(remaining);
+    if (editingId === session.id) cancelEdit();
+    setSyncing(true);
+    try {
+      const store = await replaceBankrollSessions(session.kind, remainingKind);
+      setSessions(dedupeSessions(flattenStore(store)));
+    } catch {
+      /* offline / no /api — keep the optimistic local state */
     } finally {
       setSyncing(false);
     }
@@ -228,9 +296,304 @@ export function BankrollPage() {
               ))}
             </div>
           </Section>
+
+          <Section title="Records" right={`${listedSessions.length} / ${sessions.length} sessions`}>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-left text-xs">
+                <thead className="text-gray-500">
+                  <tr className="border-b border-gray-800">
+                    <th className="whitespace-nowrap px-2 py-2 font-semibold">Date</th>
+                    <th className="whitespace-nowrap px-2 py-2 font-semibold">Type</th>
+                    <th className="min-w-52 px-2 py-2 font-semibold">Name</th>
+                    <th className="whitespace-nowrap px-2 py-2 text-right font-semibold">Win/Loss</th>
+                    <th className="whitespace-nowrap px-2 py-2 text-right font-semibold">Cost</th>
+                    <th className="whitespace-nowrap px-2 py-2 text-right font-semibold">Entries</th>
+                    <th className="whitespace-nowrap px-2 py-2 text-right font-semibold">Rank</th>
+                    <th className="whitespace-nowrap px-2 py-2 text-right font-semibold">Profit</th>
+                    <th className="whitespace-nowrap px-2 py-2 text-right font-semibold">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-800">
+                  {listedSessions.map((session) => {
+                    const isEditing = editingId === session.id && draft;
+                    const missingTicketPrice = hasMissingTicketPrice(session);
+                    const editingMissingTicketPrice = Boolean(isEditing && session.isTicket && draft.ticketPrice.trim() === '');
+                    return (
+                      <tr
+                        key={`${session.kind}-${session.id}`}
+                        className={`text-gray-300 ${missingTicketPrice ? 'bg-red-950/25' : ''}`}
+                      >
+                        <td className="whitespace-nowrap px-2 py-2 align-top">
+                          {isEditing ? (
+                            <input
+                              type="datetime-local"
+                              value={draft.datetime}
+                              onChange={(e) => setDraft({ ...draft, datetime: e.target.value })}
+                              className="w-44 rounded border border-gray-700 bg-gray-950 px-2 py-1 text-gray-200 [color-scheme:dark]"
+                            />
+                          ) : (
+                            session.datetime
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap px-2 py-2 align-top">
+                          <span className={`rounded px-2 py-1 text-[11px] uppercase ${missingTicketPrice ? 'bg-red-900/70 text-red-100 ring-1 ring-red-500/70' : 'bg-gray-800 text-gray-300'}`}>
+                            {session.isTicket ? 'ticket' : session.kind}
+                          </span>
+                        </td>
+                        <td className="px-2 py-2 align-top">
+                          {isEditing ? (
+                            <input
+                              value={draft.name}
+                              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                              className="w-full min-w-52 rounded border border-gray-700 bg-gray-950 px-2 py-1 text-gray-200"
+                            />
+                          ) : (
+                            <div className="max-w-80 truncate text-gray-200" title={session.name || session.id}>
+                              {session.name || session.id}
+                            </div>
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap px-2 py-2 text-right align-top">
+                          {isEditing ? (
+                            <NumberInput value={draft.winLoss} onChange={(value) => setDraft({ ...draft, winLoss: value })} />
+                          ) : (
+                            formatUsd(session.winLoss)
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap px-2 py-2 text-right align-top">
+                          {session.kind === 'tournament' ? (
+                            isEditing ? (
+                              <div className="flex flex-col items-end gap-1">
+                                <NumberInput
+                                  value={session.isTicket ? draft.ticketPrice : draft.buyIn}
+                                  onChange={(value) => setDraft(session.isTicket ? { ...draft, ticketPrice: value } : { ...draft, buyIn: value })}
+                                  min={0}
+                                  invalid={editingMissingTicketPrice}
+                                />
+                                {editingMissingTicketPrice && <span className="text-[11px] font-semibold text-red-300">티켓 가격 필요</span>}
+                              </div>
+                            ) : (
+                              <span className={missingTicketPrice ? 'font-semibold text-red-300' : undefined}>
+                                {missingTicketPrice ? '티켓 가격 필요' : formatUsd(session.isTicket ? (session.ticketPrice ?? session.buyIn ?? 0) : (session.buyIn ?? 0))}
+                              </span>
+                            )
+                          ) : (
+                            <span className="text-gray-600">-</span>
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap px-2 py-2 text-right align-top">
+                          {session.kind === 'tournament' ? (
+                            isEditing ? (
+                              <NumberInput value={draft.entries} onChange={(value) => setDraft({ ...draft, entries: value })} integer min={1} />
+                            ) : (
+                              session.entries ?? 1
+                            )
+                          ) : (
+                            <span className="text-gray-600">-</span>
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap px-2 py-2 text-right align-top">
+                          {session.kind === 'tournament' ? (
+                            isEditing ? (
+                              <NumberInput value={draft.rank} onChange={(value) => setDraft({ ...draft, rank: value })} integer allowBlank min={1} />
+                            ) : (
+                              session.rank ?? '-'
+                            )
+                          ) : (
+                            <span className="text-gray-600">-</span>
+                          )}
+                        </td>
+                        <td className={`whitespace-nowrap px-2 py-2 text-right align-top font-semibold ${session.profit >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          {formatUsd(session.profit)}
+                        </td>
+                        <td className="whitespace-nowrap px-2 py-2 text-right align-top">
+                          {isEditing ? (
+                            <div className="flex justify-end gap-2">
+                              <button onClick={() => saveEdit(session)} disabled={syncing} className="rounded bg-indigo-600 px-2 py-1 text-white hover:bg-indigo-500 disabled:opacity-50">
+                                저장
+                              </button>
+                              <button onClick={cancelEdit} disabled={syncing} className="rounded border border-gray-700 bg-gray-800 px-2 py-1 text-gray-300 hover:text-white disabled:opacity-50">
+                                취소
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex justify-end gap-2">
+                              <button onClick={() => startEdit(session)} disabled={syncing} className="rounded border border-gray-700 bg-gray-800 px-2 py-1 text-gray-300 hover:text-white disabled:opacity-50">
+                                수정
+                              </button>
+                              <button onClick={() => deleteSession(session)} disabled={syncing} className="rounded border border-red-900/70 bg-red-950/40 px-2 py-1 text-red-300 hover:text-red-200 disabled:opacity-50">
+                                삭제
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Section>
         </>
       )}
     </div>
+  );
+}
+
+function collectTicketPrices(parsed: unknown): Record<string, number> | null {
+  if (!Array.isArray(parsed) || parsed.length === 0) return {};
+  const first = parsed[0] as Record<string, unknown>;
+  if (!first || !('tournament_id' in first)) return {};
+
+  const ticketRows = new Map<string, RawTournament>();
+  for (const row of parsed as RawTournament[]) {
+    if (
+      typeof row?.tournament_id === 'string' &&
+      row.tournament_id.length > 0 &&
+      isTicketValue(row.is_ticket) &&
+      !ticketRows.has(row.tournament_id)
+    ) {
+      ticketRows.set(row.tournament_id, row);
+    }
+  }
+  if (ticketRows.size === 0) return {};
+
+  const prices: Record<string, number> = {};
+  for (const [id, row] of ticketRows) {
+    const label = row.tournament_name || id;
+    const fallback = String(row.buy_in ?? '0');
+    const promptText = `${label}\n티켓으로 참가한 토너먼트입니다. 실제 티켓 가격(USD)을 입력하세요.`;
+    let value: number | null = null;
+
+    while (value === null) {
+      const input = window.prompt(promptText, fallback);
+      if (input === null) return null;
+      const parsedPrice = Number.parseFloat(input.replace(/,/g, '').trim());
+      if (Number.isFinite(parsedPrice) && parsedPrice >= 0) {
+        value = parsedPrice;
+      } else {
+        window.alert('0 이상의 숫자로 입력해주세요.');
+      }
+    }
+    prices[id] = value;
+  }
+
+  return prices;
+}
+
+interface SessionDraft {
+  datetime: string;
+  name: string;
+  winLoss: string;
+  buyIn: string;
+  ticketPrice: string;
+  entries: string;
+  rank: string;
+}
+
+function sessionToDraft(session: BankrollSession): SessionDraft {
+  return {
+    datetime: toDateTimeInput(session.datetime),
+    name: session.name ?? '',
+    winLoss: String(session.winLoss),
+    buyIn: String(session.buyIn ?? 0),
+    ticketPrice: hasMissingTicketPrice(session) ? '' : String(session.ticketPrice ?? session.buyIn ?? 0),
+    entries: String(session.entries ?? 1),
+    rank: session.rank === undefined ? '' : String(session.rank),
+  };
+}
+
+function draftToSession(
+  original: BankrollSession,
+  draft: SessionDraft,
+): { ok: true; session: BankrollSession } | { ok: false; error: string } {
+  const winLoss = parseDraftNumber(draft.winLoss);
+  if (winLoss === null) return { ok: false, error: 'Win/Loss는 숫자로 입력해주세요.' };
+
+  const datetime = fromDateTimeInput(draft.datetime);
+  if (!datetime) return { ok: false, error: '날짜를 입력해주세요.' };
+
+  if (original.kind === 'cash') {
+    return {
+      ok: true,
+      session: {
+        ...original,
+        datetime,
+        name: draft.name.trim() || original.name,
+        winLoss,
+      },
+    };
+  }
+
+  const buyIn = parseDraftNumber(draft.buyIn);
+  const ticketPrice = parseDraftNumber(draft.ticketPrice);
+  const entries = parseDraftInteger(draft.entries);
+  const rank = draft.rank.trim() === '' ? undefined : parseDraftInteger(draft.rank);
+  if (buyIn === null || buyIn < 0) return { ok: false, error: 'Cost는 0 이상의 숫자로 입력해주세요.' };
+  if (ticketPrice !== null && ticketPrice < 0) return { ok: false, error: 'Cost는 0 이상의 숫자로 입력해주세요.' };
+  if (entries === null || entries < 1) return { ok: false, error: 'Entries는 1 이상의 정수로 입력해주세요.' };
+  if (rank === null || (rank !== undefined && rank < 1)) return { ok: false, error: 'Rank는 비워두거나 1 이상의 정수로 입력해주세요.' };
+  const resolvedTicketPrice = original.isTicket ? (ticketPrice ?? undefined) : original.ticketPrice;
+
+  return {
+    ok: true,
+    session: {
+      ...original,
+      datetime,
+      name: draft.name.trim() || original.name,
+      winLoss,
+      buyIn: original.isTicket ? resolvedTicketPrice : buyIn,
+      ticketPrice: resolvedTicketPrice,
+      entries,
+      rank,
+    },
+  };
+}
+
+function parseDraftNumber(value: string): number | null {
+  const n = Number.parseFloat(value.replace(/,/g, '').trim());
+  return Number.isFinite(n) ? n : null;
+}
+
+function parseDraftInteger(value: string): number | null {
+  const n = Number.parseInt(value.replace(/,/g, '').trim(), 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+function toDateTimeInput(datetime: string): string {
+  return datetime.includes(' ') ? datetime.replace(' ', 'T').slice(0, 16) : datetime.slice(0, 16);
+}
+
+function fromDateTimeInput(datetime: string): string {
+  const trimmed = datetime.trim();
+  if (!trimmed) return '';
+  return trimmed.includes('T') ? `${trimmed.replace('T', ' ')}:00`.slice(0, 19) : trimmed;
+}
+
+function NumberInput({
+  value,
+  onChange,
+  integer = false,
+  allowBlank = false,
+  min,
+  invalid = false,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  integer?: boolean;
+  allowBlank?: boolean;
+  min?: number;
+  invalid?: boolean;
+}) {
+  return (
+    <input
+      type="number"
+      step={integer ? 1 : 0.01}
+      min={allowBlank && value === '' ? undefined : min}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={`w-24 rounded border bg-gray-950 px-2 py-1 text-right text-gray-200 ${invalid ? 'border-red-500 ring-1 ring-red-500/60' : 'border-gray-700'}`}
+    />
   );
 }
 

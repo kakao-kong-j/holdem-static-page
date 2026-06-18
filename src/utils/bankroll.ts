@@ -20,6 +20,7 @@ export interface RawTournament {
   win_loss: string;
   rank?: number;
   total_no_of_entries: number;
+  is_ticket?: boolean | string | number;
 }
 
 export interface BankrollSession {
@@ -32,13 +33,33 @@ export interface BankrollSession {
   entries?: number;
   name?: string;
   rank?: number;
+  isTicket?: boolean;
+  ticketPrice?: number;
   tags: string[];
+}
+
+export interface BankrollParseOptions {
+  ticketPrices?: Record<string, number>;
 }
 
 /** parseFloat that returns 0 for blank/NaN inputs. */
 function num(v: unknown): number {
   const n = parseFloat(String(v ?? '').replace(/,/g, ''));
   return Number.isFinite(n) ? n : 0;
+}
+
+export function isTicketValue(v: unknown): boolean {
+  if (v === true || v === 1) return true;
+  if (typeof v === 'string') {
+    const normalized = v.trim().toLowerCase();
+    return normalized === 'true' || normalized === '1' || normalized === 'yes';
+  }
+  return false;
+}
+
+function ticketPriceFor(id: string, options?: BankrollParseOptions): number | null {
+  const price = options?.ticketPrices?.[id];
+  return typeof price === 'number' && Number.isFinite(price) && price >= 0 ? price : null;
 }
 
 /** Cash game-type → tag. id first, game_type string fallback. */
@@ -73,16 +94,22 @@ export function normalizeCashSessions(rows: RawCash[]): BankrollSession[] {
   });
 }
 
-export function normalizeTournamentSessions(rows: RawTournament[]): BankrollSession[] {
+export function normalizeTournamentSessions(
+  rows: RawTournament[],
+  options?: BankrollParseOptions,
+): BankrollSession[] {
   return rows
     .filter((r) => typeof r?.tournament_id === 'string' && r.tournament_id.length > 0)
     .map((r) => {
-    const buyIn = num(r.buy_in);
+    const id = r.tournament_id;
+    const isTicket = isTicketValue(r.is_ticket);
+    const ticketPrice = isTicket ? ticketPriceFor(id, options) : null;
+    const buyIn = ticketPrice ?? num(r.buy_in);
     // `?? 1` would miss a literal 0 (malformed/partial export) → buyIn*0 = 0 cost.
     const entries = r.total_no_of_entries > 0 ? r.total_no_of_entries : 1;
     const winLoss = num(r.win_loss);
     return {
-      id: r.tournament_id,
+      id,
       kind: 'tournament' as const,
       datetime: r.start_datetime,
       profit: winLoss - buyIn * entries,
@@ -91,6 +118,8 @@ export function normalizeTournamentSessions(rows: RawTournament[]): BankrollSess
       entries,
       name: r.tournament_name,
       rank: r.rank,
+      isTicket,
+      ...(ticketPrice !== null ? { ticketPrice } : {}),
       tags: ['CoinPoker', 'Tournament History'],
     };
   });
@@ -104,13 +133,35 @@ export function dedupeSessions(sessions: BankrollSession[]): BankrollSession[] {
 }
 
 /** Auto-detect cash vs tournament from a parsed JSON array. */
-export function parseBankrollFile(parsed: unknown): BankrollSession[] {
+export function parseBankrollFile(parsed: unknown, options?: BankrollParseOptions): BankrollSession[] {
   if (!Array.isArray(parsed) || parsed.length === 0) return [];
   const first = parsed[0] as Record<string, unknown>;
   if (first && 'tournament_id' in first) {
-    return normalizeTournamentSessions(parsed as RawTournament[]);
+    return normalizeTournamentSessions(parsed as RawTournament[], options);
   }
   return normalizeCashSessions(parsed as RawCash[]);
+}
+
+export function recalculateSessionProfit(session: BankrollSession): BankrollSession {
+  if (session.kind === 'cash') {
+    return { ...session, profit: session.winLoss };
+  }
+
+  const entries = session.entries && session.entries > 0 ? session.entries : 1;
+  const buyIn = session.isTicket ? (session.ticketPrice ?? session.buyIn ?? 0) : (session.buyIn ?? 0);
+  return {
+    ...session,
+    buyIn,
+    entries,
+    profit: session.winLoss - buyIn * entries,
+  };
+}
+
+export function hasMissingTicketPrice(session: BankrollSession): boolean {
+  return session.isTicket === true && (
+    typeof session.ticketPrice !== 'number' ||
+    !Number.isFinite(session.ticketPrice)
+  );
 }
 
 export interface TrendPoint { datetime: string; value: number; }
