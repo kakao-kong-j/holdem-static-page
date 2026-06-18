@@ -49,20 +49,30 @@ describe('normalizeTournamentSessions', () => {
     expect(out.find(s => s.id === 't1')!.tags).toEqual(['CoinPoker', 'Tournament History']);
   });
 
-  it('uses the supplied ticket price instead of buy_in for ticket tournaments', () => {
+  it('adds the supplied ticket price as prize value for ticket tournaments', () => {
     const out = normalizeTournamentSessions([
       { tournament_id: 'ticket-1', tournament_name: 'Ticket Event', minigames_type_id: 1, start_datetime: '2026-06-12 18:00:00', internal_ref: 'r-ticket', buy_in: '0.00', win_loss: '15.00', rank: 3, total_no_of_entries: 2, is_ticket: true },
     ], { ticketPrices: { 'ticket-1': 5.5 } });
 
-    expect(out[0].profit).toBeCloseTo(4, 5);
-    expect(out[0].buyIn).toBeCloseTo(5.5, 5);
+    expect(out[0].profit).toBeCloseTo(20.5, 5);
+    expect(out[0].buyIn).toBeCloseTo(0, 5);
     expect(out[0].ticketPrice).toBeCloseTo(5.5, 5);
     expect(out[0].isTicket).toBe(true);
   });
 
-  it('counts tickets won from cash-entry satellites as prize value minus cash buy-in', () => {
+  it('counts ticket prizes as prize value minus cash buy-in', () => {
     const out = normalizeTournamentSessions([
       { tournament_id: '67362', tournament_name: 'Step [2] to ₮109 CoinMasters PENGU', minigames_type_id: 1, start_datetime: '2026-06-16 13:05:00', internal_ref: 'r-ticket-win', buy_in: '1.10', win_loss: '0.00', rank: 19, total_no_of_entries: 1, is_ticket: true, entry_type: 'CASH' },
+    ], { ticketPrices: { 'dest:₮109 coinmasters pengu': 11 } });
+
+    expect(out[0].buyIn).toBeCloseTo(1.1, 5);
+    expect(out[0].ticketPrice).toBeCloseTo(11, 5);
+    expect(out[0].profit).toBeCloseTo(9.9, 5);
+  });
+
+  it('counts ticket prizes as winnings regardless of entry_type', () => {
+    const out = normalizeTournamentSessions([
+      { tournament_id: '67362', tournament_name: 'Step [2] to ₮109 CoinMasters PENGU', minigames_type_id: 1, start_datetime: '2026-06-16 13:05:00', internal_ref: 'r-ticket-win', buy_in: '1.10', win_loss: '0.00', rank: 19, total_no_of_entries: 1, is_ticket: true },
     ], { ticketPrices: { 'dest:₮109 coinmasters pengu': 11 } });
 
     expect(out[0].buyIn).toBeCloseTo(1.1, 5);
@@ -111,7 +121,7 @@ describe('parseBankrollFile', () => {
       { tournament_id: 'ticket-parse', tournament_name: 'Ticket Event', minigames_type_id: 1, start_datetime: '2026-06-12 18:00:00', internal_ref: 'r-ticket', buy_in: '0.00', win_loss: '12.00', total_no_of_entries: 1, is_ticket: true },
     ], { ticketPrices: { 'ticket-parse': 3.3 } });
 
-    expect(out[0].profit).toBeCloseTo(8.7, 5);
+    expect(out[0].profit).toBeCloseTo(15.3, 5);
   });
   it('detects cash otherwise', () => {
     const out = parseBankrollFile(cash);
@@ -169,7 +179,7 @@ describe('parseBankrollFile with ticket export prices', () => {
     ], { ticketPrices });
 
     expect(out[0].ticketPrice).toBeCloseTo(1.1, 5);
-    expect(out[0].profit).toBeCloseTo(10.9, 5);
+    expect(out[0].profit).toBeCloseTo(13.1, 5);
     expect(hasMissingTicketPrice(out[0])).toBe(false);
   });
 
@@ -182,7 +192,7 @@ describe('parseBankrollFile with ticket export prices', () => {
     ], { ticketPrices });
 
     expect(out[0].ticketPrice).toBeCloseTo(11, 5);
-    expect(out[0].profit).toBeCloseTo(-11, 5);
+    expect(out[0].profit).toBeCloseTo(9.9, 5);
     expect(hasMissingTicketPrice(out[0])).toBe(false);
   });
 });
@@ -258,15 +268,15 @@ describe('recalculateSessionProfit', () => {
     expect(recalculateSessionProfit({ ...session, winLoss: -1.25 }).profit).toBeCloseTo(-1.25, 5);
   });
 
-  it('uses edited ticket price for tournament profit', () => {
+  it('adds edited ticket price to tournament profit', () => {
     const [session] = normalizeTournamentSessions([
       { tournament_id: 'ticket-edit', tournament_name: 'Ticket Event', minigames_type_id: 1, start_datetime: '2026-06-12 18:00:00', internal_ref: 'r-ticket', buy_in: '0.00', win_loss: '20.00', total_no_of_entries: 2, is_ticket: true },
     ], { ticketPrices: { 'ticket-edit': 4 } });
 
     const updated = recalculateSessionProfit({ ...session, ticketPrice: 6, entries: 3 });
 
-    expect(updated.buyIn).toBeCloseTo(6, 5);
-    expect(updated.profit).toBeCloseTo(2, 5);
+    expect(updated.buyIn).toBeCloseTo(0, 5);
+    expect(updated.profit).toBeCloseTo(26, 5);
   });
 });
 

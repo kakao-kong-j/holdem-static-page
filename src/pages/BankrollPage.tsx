@@ -332,7 +332,6 @@ export function BankrollPage() {
                   {listedSessions.map((session) => {
                     const isEditing = editingId === session.id && draft;
                     const missingTicketPrice = hasMissingTicketPrice(session);
-                    const isTicketPrize = session.isTicket === true && session.entryType?.toUpperCase() === 'CASH';
                     const editingMissingTicketPrice = Boolean(isEditing && session.isTicket && draft.ticketPrice.trim() === '');
                     return (
                       <tr
@@ -353,7 +352,7 @@ export function BankrollPage() {
                         </td>
                         <td className="whitespace-nowrap px-2 py-2 align-top">
                           <span className={`rounded px-2 py-1 text-[11px] uppercase ${missingTicketPrice ? 'bg-red-900/70 text-red-100 ring-1 ring-red-500/70' : 'bg-gray-800 text-gray-300'}`}>
-                            {isTicketPrize ? 'ticket prize' : session.isTicket ? 'ticket' : session.kind}
+                            {session.isTicket ? 'ticket prize' : session.kind}
                           </span>
                         </td>
                         <td className="px-2 py-2 align-top">
@@ -380,7 +379,7 @@ export function BankrollPage() {
                           {session.kind === 'tournament' ? (
                             isEditing ? (
                               <div className="flex flex-col items-end gap-1">
-                                {isTicketPrize ? (
+                                {session.isTicket ? (
                                   <>
                                     <label className="flex items-center justify-end gap-2">
                                       <span className="text-[11px] text-gray-500">Cost</span>
@@ -412,7 +411,7 @@ export function BankrollPage() {
                               </div>
                             ) : (
                               <span className={missingTicketPrice ? 'font-semibold text-red-300' : undefined}>
-                                {missingTicketPrice ? '티켓 가격 필요' : isTicketPrize ? (
+                                {missingTicketPrice ? '티켓 가격 필요' : session.isTicket ? (
                                   <span className="flex flex-col items-end gap-0.5">
                                     <span>Cost {formatUsd(session.buyIn ?? 0)}</span>
                                     <span className="text-green-300">Ticket +{formatUsd(session.ticketPrice ?? 0)}</span>
@@ -509,9 +508,7 @@ function collectTicketPrices(
   for (const [id, row] of ticketRows) {
     const label = row.tournament_name || id;
     const fallback = String(row.buy_in ?? '0');
-    const promptText = row.entry_type?.toUpperCase() === 'CASH'
-      ? `${label}\n현금 참가 후 티켓을 획득한 토너먼트입니다. 획득한 티켓 가격(USD)을 입력하세요.`
-      : `${label}\n티켓으로 참가한 토너먼트입니다. 실제 티켓 가격(USD)을 입력하세요.`;
+    const promptText = `${label}\n티켓으로 상금을 받은 토너먼트입니다. 획득한 티켓 가격(USD)을 입력하세요.`;
     let value: number | null = null;
 
     while (value === null) {
@@ -566,7 +563,7 @@ function sessionToDraft(session: BankrollSession): SessionDraft {
     name: session.name ?? '',
     winLoss: String(session.winLoss),
     buyIn: String(session.buyIn ?? 0),
-    ticketPrice: hasMissingTicketPrice(session) ? '' : String(session.ticketPrice ?? session.buyIn ?? 0),
+    ticketPrice: session.isTicket ? String(session.ticketPrice ?? '') : '',
     entries: String(session.entries ?? 1),
     rank: session.rank === undefined ? '' : String(session.rank),
   };
@@ -598,7 +595,6 @@ function draftToSession(
   const ticketPrice = parseDraftNumber(draft.ticketPrice);
   const entries = parseDraftInteger(draft.entries);
   const rank = draft.rank.trim() === '' ? undefined : parseDraftInteger(draft.rank);
-  const isTicketPrize = original.isTicket === true && original.entryType?.toUpperCase() === 'CASH';
   if (buyIn === null || buyIn < 0) return { ok: false, error: 'Cost는 0 이상의 숫자로 입력해주세요.' };
   if (ticketPrice !== null && ticketPrice < 0) return { ok: false, error: 'Cost는 0 이상의 숫자로 입력해주세요.' };
   if (entries === null || entries < 1) return { ok: false, error: 'Entries는 1 이상의 정수로 입력해주세요.' };
@@ -612,7 +608,7 @@ function draftToSession(
       datetime,
       name: draft.name.trim() || original.name,
       winLoss,
-      buyIn: original.isTicket && !isTicketPrize ? resolvedTicketPrice : buyIn,
+      buyIn,
       ticketPrice: resolvedTicketPrice,
       entries,
       rank,

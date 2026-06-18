@@ -180,18 +180,16 @@ export function normalizeTournamentSessions(
     const isTicket = isTicketValue(r.is_ticket);
     const ticketPrice = isTicket ? findTicketPrice(id, r.tournament_name, options?.ticketPrices) : null;
     const entryType = typeof r.entry_type === 'string' ? r.entry_type : undefined;
-    const isTicketPrize = isTicket && entryType?.toUpperCase() === 'CASH';
-    const buyIn = isTicket && !isTicketPrize ? (ticketPrice ?? num(r.buy_in)) : num(r.buy_in);
+    const buyIn = num(r.buy_in);
     // `?? 1` would miss a literal 0 (malformed/partial export) → buyIn*0 = 0 cost.
     const entries = r.total_no_of_entries > 0 ? r.total_no_of_entries : 1;
     const winLoss = num(r.win_loss);
+    const ticketPrize = isTicket ? (ticketPrice ?? 0) : 0;
     return {
       id,
       kind: 'tournament' as const,
       datetime: r.start_datetime,
-      profit: isTicketPrize && ticketPrice !== null
-        ? winLoss + ticketPrice - buyIn * entries
-        : winLoss - buyIn * entries,
+      profit: winLoss + ticketPrize - buyIn * entries,
       winLoss,
       buyIn,
       entries,
@@ -228,9 +226,8 @@ export function recalculateSessionProfit(session: BankrollSession): BankrollSess
   }
 
   const entries = session.entries && session.entries > 0 ? session.entries : 1;
-  const isTicketPrize = session.isTicket === true && session.entryType?.toUpperCase() === 'CASH';
-  const buyIn = session.isTicket && !isTicketPrize ? (session.ticketPrice ?? session.buyIn ?? 0) : (session.buyIn ?? 0);
-  const ticketPrize = isTicketPrize ? (session.ticketPrice ?? 0) : 0;
+  const buyIn = session.buyIn ?? 0;
+  const ticketPrize = session.isTicket ? (session.ticketPrice ?? 0) : 0;
   return {
     ...session,
     buyIn,
