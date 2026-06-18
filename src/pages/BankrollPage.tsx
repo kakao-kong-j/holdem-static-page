@@ -11,6 +11,7 @@ import {
   isTicketValue,
   recalculateSessionProfit,
   hasMissingTicketPrice,
+  extractTicketPrices,
   type BankrollSession,
   type RawTournament,
 } from '../utils/bankroll';
@@ -70,22 +71,35 @@ export function BankrollPage() {
     setFileError(null);
     const added: BankrollSession[] = [];
     const errors: string[] = [];
+    const parsedFiles: Array<{ name: string; parsed: unknown }> = [];
     for (const f of files) {
       try {
-        const parsed = JSON.parse(await f.text());
-        const ticketPrices = collectTicketPrices(parsed);
-        if (ticketPrices === null) {
-          errors.push(`${f.name}: 티켓 가격 입력 취소`);
-          continue;
-        }
-        const got = parseBankrollFile(parsed, { ticketPrices });
-        if (got.length === 0) errors.push(`${f.name}: 인식 가능한 항목 없음`);
-        added.push(...got);
+        parsedFiles.push({ name: f.name, parsed: JSON.parse(await f.text()) });
       } catch (err) {
         const message = err instanceof Error ? err.message : 'JSON 파싱 실패';
         errors.push(`${f.name}: ${message}`);
       }
     }
+
+    const importedTicketPrices = mergeTicketPrices(parsedFiles.map(({ parsed }) => extractTicketPrices(parsed)));
+    for (const { name, parsed } of parsedFiles) {
+      try {
+        if (isTicketExport(parsed)) continue;
+        const manualTicketPrices = collectTicketPrices(parsed, importedTicketPrices);
+        if (manualTicketPrices === null) {
+          errors.push(`${name}: 티켓 가격 입력 취소`);
+          continue;
+        }
+        const ticketPrices = { ...importedTicketPrices, ...manualTicketPrices };
+        const got = parseBankrollFile(parsed, { ticketPrices });
+        if (got.length === 0) errors.push(`${name}: 인식 가능한 항목 없음`);
+        added.push(...got);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : '처리 실패';
+        errors.push(`${name}: ${message}`);
+      }
+    }
+
     if (inputRef.current) inputRef.current.value = '';
     if (errors.length) setFileError(errors.join(' / '));
     if (added.length === 0) return;
@@ -440,7 +454,10 @@ export function BankrollPage() {
   );
 }
 
-function collectTicketPrices(parsed: unknown): Record<string, number> | null {
+function collectTicketPrices(
+  parsed: unknown,
+  knownTicketPrices: Record<string, number> = {},
+): Record<string, number> | null {
   if (!Array.isArray(parsed) || parsed.length === 0) return {};
   const first = parsed[0] as Record<string, unknown>;
   if (!first || !('tournament_id' in first)) return {};
@@ -451,6 +468,7 @@ function collectTicketPrices(parsed: unknown): Record<string, number> | null {
       typeof row?.tournament_id === 'string' &&
       row.tournament_id.length > 0 &&
       isTicketValue(row.is_ticket) &&
+      knownTicketPrices[row.tournament_id] === undefined &&
       !ticketRows.has(row.tournament_id)
     ) {
       ticketRows.set(row.tournament_id, row);
@@ -479,6 +497,26 @@ function collectTicketPrices(parsed: unknown): Record<string, number> | null {
   }
 
   return prices;
+}
+
+function mergeTicketPrices(priceMaps: Record<string, number>[]): Record<string, number> {
+  return Object.assign({}, ...priceMaps);
+}
+
+function isTicketExport(parsed: unknown): boolean {
+  if (!Array.isArray(parsed) || parsed.length === 0) return false;
+  return parsed.some((row) => {
+    const candidate = row as Record<string, unknown>;
+    return (
+      candidate &&
+      'ticketAmount' in candidate &&
+      (
+        'selectedEligibleTournamentId' in candidate ||
+        'eligibleTournaments' in candidate ||
+        'ticketList' in candidate
+      )
+    );
+  });
 }
 
 interface SessionDraft {

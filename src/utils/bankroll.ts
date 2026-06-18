@@ -23,6 +23,12 @@ export interface RawTournament {
   is_ticket?: boolean | string | number;
 }
 
+interface RawTicketExport {
+  ticketAmount?: unknown;
+  selectedEligibleTournamentId?: unknown;
+  eligibleTournaments?: Array<{ tourneyId?: unknown }>;
+}
+
 export interface BankrollSession {
   id: string;
   kind: BankrollKind;
@@ -60,6 +66,29 @@ export function isTicketValue(v: unknown): boolean {
 function ticketPriceFor(id: string, options?: BankrollParseOptions): number | null {
   const price = options?.ticketPrices?.[id];
   return typeof price === 'number' && Number.isFinite(price) && price >= 0 ? price : null;
+}
+
+export function extractTicketPrices(parsed: unknown): Record<string, number> {
+  if (!Array.isArray(parsed) || parsed.length === 0) return {};
+
+  const prices: Record<string, number> = {};
+  for (const raw of parsed as RawTicketExport[]) {
+    if (!raw || typeof raw !== 'object' || !('ticketAmount' in raw)) continue;
+    const ticketAmount = num(raw?.ticketAmount);
+    if (!Number.isFinite(ticketAmount) || ticketAmount < 0) continue;
+
+    const ids = [
+      raw.selectedEligibleTournamentId,
+      ...(Array.isArray(raw.eligibleTournaments)
+        ? raw.eligibleTournaments.map((t) => t?.tourneyId)
+        : []),
+    ];
+    for (const id of ids) {
+      if (id === undefined || id === null || id === '') continue;
+      prices[String(id)] = ticketAmount;
+    }
+  }
+  return prices;
 }
 
 /** Cash game-type → tag. id first, game_type string fallback. */

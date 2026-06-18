@@ -12,6 +12,7 @@ import {
   formatUsd,
   recalculateSessionProfit,
   hasMissingTicketPrice,
+  extractTicketPrices,
   type RawCash,
   type RawTournament,
 } from './bankroll';
@@ -108,6 +109,43 @@ describe('parseBankrollFile', () => {
   it('returns [] for empty/non-array', () => {
     expect(parseBankrollFile([])).toEqual([]);
     expect(parseBankrollFile({} as unknown)).toEqual([]);
+  });
+});
+
+describe('extractTicketPrices', () => {
+  it('builds a tournament id to ticket amount map from CoinPoker ticket exports', () => {
+    const prices = extractTicketPrices([
+      {
+        title: 'Step [2] to ₮109 CoinMasters PEPE',
+        ticketAmount: 1.1,
+        selectedEligibleTournamentId: 63886,
+        eligibleTournaments: [
+          { tourneyId: 63886, tourneyName: 'Step [2] to ₮109 CoinMasters PEPE' },
+        ],
+      },
+    ]);
+
+    expect(prices).toEqual({ '63886': 1.1 });
+  });
+
+  it('returns an empty map for non-ticket exports', () => {
+    expect(extractTicketPrices(tourneys)).toEqual({});
+    expect(extractTicketPrices(cash)).toEqual({});
+  });
+});
+
+describe('parseBankrollFile with ticket export prices', () => {
+  it('uses prices extracted from a ticket export for matching ticket tournaments', () => {
+    const ticketPrices = extractTicketPrices([
+      { ticketAmount: 1.1, selectedEligibleTournamentId: 63886 },
+    ]);
+    const out = parseBankrollFile([
+      { tournament_id: '63886', tournament_name: 'Step [2] to ₮109 CoinMasters PEPE', minigames_type_id: 1, start_datetime: '2026-06-12 18:00:00', internal_ref: 'r-ticket', buy_in: '0.00', win_loss: '12.00', total_no_of_entries: 1, is_ticket: true },
+    ], { ticketPrices });
+
+    expect(out[0].ticketPrice).toBeCloseTo(1.1, 5);
+    expect(out[0].profit).toBeCloseTo(10.9, 5);
+    expect(hasMissingTicketPrice(out[0])).toBe(false);
   });
 });
 
