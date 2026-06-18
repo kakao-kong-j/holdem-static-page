@@ -21,6 +21,7 @@ export interface RawTournament {
   rank?: number;
   total_no_of_entries: number;
   is_ticket?: boolean | string | number;
+  entry_type?: string;
 }
 
 interface RawTicketExport {
@@ -42,6 +43,7 @@ export interface BankrollSession {
   name?: string;
   rank?: number;
   isTicket?: boolean;
+  entryType?: string;
   ticketPrice?: number;
   tags: string[];
 }
@@ -177,7 +179,9 @@ export function normalizeTournamentSessions(
     const id = r.tournament_id;
     const isTicket = isTicketValue(r.is_ticket);
     const ticketPrice = isTicket ? findTicketPrice(id, r.tournament_name, options?.ticketPrices) : null;
-    const buyIn = ticketPrice ?? num(r.buy_in);
+    const entryType = typeof r.entry_type === 'string' ? r.entry_type : undefined;
+    const isTicketPrize = isTicket && entryType?.toUpperCase() === 'CASH';
+    const buyIn = isTicket && !isTicketPrize ? (ticketPrice ?? num(r.buy_in)) : num(r.buy_in);
     // `?? 1` would miss a literal 0 (malformed/partial export) → buyIn*0 = 0 cost.
     const entries = r.total_no_of_entries > 0 ? r.total_no_of_entries : 1;
     const winLoss = num(r.win_loss);
@@ -185,13 +189,16 @@ export function normalizeTournamentSessions(
       id,
       kind: 'tournament' as const,
       datetime: r.start_datetime,
-      profit: winLoss - buyIn * entries,
+      profit: isTicketPrize && ticketPrice !== null
+        ? winLoss + ticketPrice - buyIn * entries
+        : winLoss - buyIn * entries,
       winLoss,
       buyIn,
       entries,
       name: r.tournament_name,
       rank: r.rank,
       isTicket,
+      entryType,
       ...(ticketPrice !== null ? { ticketPrice } : {}),
       tags: ['CoinPoker', 'Tournament History'],
     };
@@ -221,12 +228,14 @@ export function recalculateSessionProfit(session: BankrollSession): BankrollSess
   }
 
   const entries = session.entries && session.entries > 0 ? session.entries : 1;
-  const buyIn = session.isTicket ? (session.ticketPrice ?? session.buyIn ?? 0) : (session.buyIn ?? 0);
+  const isTicketPrize = session.isTicket === true && session.entryType?.toUpperCase() === 'CASH';
+  const buyIn = session.isTicket && !isTicketPrize ? (session.ticketPrice ?? session.buyIn ?? 0) : (session.buyIn ?? 0);
+  const ticketPrize = isTicketPrize ? (session.ticketPrice ?? 0) : 0;
   return {
     ...session,
     buyIn,
     entries,
-    profit: session.winLoss - buyIn * entries,
+    profit: session.winLoss + ticketPrize - buyIn * entries,
   };
 }
 

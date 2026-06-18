@@ -60,6 +60,16 @@ describe('normalizeTournamentSessions', () => {
     expect(out[0].isTicket).toBe(true);
   });
 
+  it('counts tickets won from cash-entry satellites as prize value minus cash buy-in', () => {
+    const out = normalizeTournamentSessions([
+      { tournament_id: '67362', tournament_name: 'Step [2] to ₮109 CoinMasters PENGU', minigames_type_id: 1, start_datetime: '2026-06-16 13:05:00', internal_ref: 'r-ticket-win', buy_in: '1.10', win_loss: '0.00', rank: 19, total_no_of_entries: 1, is_ticket: true, entry_type: 'CASH' },
+    ], { ticketPrices: { 'dest:₮109 coinmasters pengu': 11 } });
+
+    expect(out[0].buyIn).toBeCloseTo(1.1, 5);
+    expect(out[0].ticketPrice).toBeCloseTo(11, 5);
+    expect(out[0].profit).toBeCloseTo(9.9, 5);
+  });
+
   it('falls back to 1 entry when total_no_of_entries is 0', () => {
     const out = normalizeTournamentSessions([
       { tournament_id: 'z', tournament_name: 'z', minigames_type_id: 1, start_datetime: '2026-06-07 06:05:00', internal_ref: 'i', buy_in: '1.10', win_loss: '0.00', total_no_of_entries: 0 },
