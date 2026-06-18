@@ -10,6 +10,8 @@ import {
   computeTagPerformance,
   summarize,
   formatUsd,
+  recalculateSessionProfit,
+  hasMissingTicketPrice,
   type RawCash,
   type RawTournament,
 } from './bankroll';
@@ -43,6 +45,17 @@ describe('normalizeTournamentSessions', () => {
     expect(out.find(s => s.id === 't1')!.profit).toBeCloseTo(41.54, 5);
     expect(out.find(s => s.id === 't2')!.profit).toBeCloseTo(-3.6, 5);
     expect(out.find(s => s.id === 't1')!.tags).toEqual(['CoinPoker', 'Tournament History']);
+  });
+
+  it('uses the supplied ticket price instead of buy_in for ticket tournaments', () => {
+    const out = normalizeTournamentSessions([
+      { tournament_id: 'ticket-1', tournament_name: 'Ticket Event', minigames_type_id: 1, start_datetime: '2026-06-12 18:00:00', internal_ref: 'r-ticket', buy_in: '0.00', win_loss: '15.00', rank: 3, total_no_of_entries: 2, is_ticket: true },
+    ], { ticketPrices: { 'ticket-1': 5.5 } });
+
+    expect(out[0].profit).toBeCloseTo(4, 5);
+    expect(out[0].buyIn).toBeCloseTo(5.5, 5);
+    expect(out[0].ticketPrice).toBeCloseTo(5.5, 5);
+    expect(out[0].isTicket).toBe(true);
   });
 
   it('falls back to 1 entry when total_no_of_entries is 0', () => {
@@ -80,6 +93,13 @@ describe('parseBankrollFile', () => {
   it('detects tournament by tournament_id key', () => {
     const out = parseBankrollFile(tourneys);
     expect(out[0].kind).toBe('tournament');
+  });
+  it('passes ticket prices through tournament parsing', () => {
+    const out = parseBankrollFile([
+      { tournament_id: 'ticket-parse', tournament_name: 'Ticket Event', minigames_type_id: 1, start_datetime: '2026-06-12 18:00:00', internal_ref: 'r-ticket', buy_in: '0.00', win_loss: '12.00', total_no_of_entries: 1, is_ticket: true },
+    ], { ticketPrices: { 'ticket-parse': 3.3 } });
+
+    expect(out[0].profit).toBeCloseTo(8.7, 5);
   });
   it('detects cash otherwise', () => {
     const out = parseBankrollFile(cash);
@@ -152,6 +172,45 @@ describe('formatUsd', () => {
   it('formats with sign', () => {
     expect(formatUsd(12.85)).toBe('$12.85');
     expect(formatUsd(-0.72)).toBe('-$0.72');
+  });
+});
+
+describe('recalculateSessionProfit', () => {
+  it('sets cash profit from edited winLoss', () => {
+    const [session] = normalizeCashSessions(cash);
+
+    expect(recalculateSessionProfit({ ...session, winLoss: -1.25 }).profit).toBeCloseTo(-1.25, 5);
+  });
+
+  it('uses edited ticket price for tournament profit', () => {
+    const [session] = normalizeTournamentSessions([
+      { tournament_id: 'ticket-edit', tournament_name: 'Ticket Event', minigames_type_id: 1, start_datetime: '2026-06-12 18:00:00', internal_ref: 'r-ticket', buy_in: '0.00', win_loss: '20.00', total_no_of_entries: 2, is_ticket: true },
+    ], { ticketPrices: { 'ticket-edit': 4 } });
+
+    const updated = recalculateSessionProfit({ ...session, ticketPrice: 6, entries: 3 });
+
+    expect(updated.buyIn).toBeCloseTo(6, 5);
+    expect(updated.profit).toBeCloseTo(2, 5);
+  });
+});
+
+describe('hasMissingTicketPrice', () => {
+  it('flags ticket tournaments without a saved ticket price', () => {
+    const [session] = normalizeTournamentSessions([
+      { tournament_id: 'ticket-missing', tournament_name: 'Ticket Event', minigames_type_id: 1, start_datetime: '2026-06-12 18:00:00', internal_ref: 'r-ticket', buy_in: '0.00', win_loss: '0.00', total_no_of_entries: 1, is_ticket: true },
+    ]);
+
+    expect(hasMissingTicketPrice(session)).toBe(true);
+  });
+
+  it('does not flag non-ticket tournaments or explicit zero ticket prices', () => {
+    const [regular] = normalizeTournamentSessions(tourneys);
+    const [ticket] = normalizeTournamentSessions([
+      { tournament_id: 'ticket-zero', tournament_name: 'Ticket Event', minigames_type_id: 1, start_datetime: '2026-06-12 18:00:00', internal_ref: 'r-ticket', buy_in: '0.00', win_loss: '0.00', total_no_of_entries: 1, is_ticket: true },
+    ], { ticketPrices: { 'ticket-zero': 0 } });
+
+    expect(hasMissingTicketPrice(regular)).toBe(false);
+    expect(hasMissingTicketPrice(ticket)).toBe(false);
   });
 });
 

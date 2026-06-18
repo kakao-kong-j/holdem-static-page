@@ -95,7 +95,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   }
 
   if (req.method === 'POST') {
-    const body = (req.body ?? {}) as { sessions?: unknown; clear?: unknown };
+    const body = (req.body ?? {}) as { sessions?: unknown; clear?: unknown; replace?: unknown };
 
     if (body.clear === 'cash' || body.clear === 'tournament' || body.clear === 'all') {
       // Return the post-clear state directly. Re-reading via head() right after
@@ -112,6 +112,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
       res.status(200).json({
         cash: body.clear === 'cash' ? [] : otherSessions,
         tournament: body.clear === 'tournament' ? [] : otherSessions,
+      });
+      return;
+    }
+
+    if (body.replace === 'cash' || body.replace === 'tournament') {
+      const sessions: StoredSession[] = Array.isArray(body.sessions)
+        ? (body.sessions as StoredSession[])
+          .filter(s => s && typeof s.id === 'string' && s.kind === body.replace)
+        : [];
+      await writeSessions(blobPath(sub, body.replace), sessions);
+      const other = body.replace === 'cash' ? 'tournament' : 'cash';
+      const otherSessions = await readSessions(blobPath(sub, other));
+      res.status(200).json({
+        cash: body.replace === 'cash' ? sessions : otherSessions,
+        tournament: body.replace === 'tournament' ? sessions : otherSessions,
       });
       return;
     }
