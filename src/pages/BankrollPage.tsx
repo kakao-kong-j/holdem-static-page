@@ -11,6 +11,8 @@ import {
   isTicketValue,
   recalculateSessionProfit,
   hasMissingTicketPrice,
+  extractTicketPrices,
+  findTicketPrice,
   type BankrollSession,
   type RawTournament,
 } from '../utils/bankroll';
@@ -70,20 +72,28 @@ export function BankrollPage() {
     setFileError(null);
     const added: BankrollSession[] = [];
     const errors: string[] = [];
+    const parsedFiles: Array<{ name: string; parsed: unknown }> = [];
     for (const f of files) {
       try {
-        const parsed = JSON.parse(await f.text());
-        const ticketPrices = collectTicketPrices(parsed);
-        if (ticketPrices === null) {
-          errors.push(`${f.name}: 티켓 가격 입력 취소`);
-          continue;
-        }
-        const got = parseBankrollFile(parsed, { ticketPrices });
-        if (got.length === 0) errors.push(`${f.name}: 인식 가능한 항목 없음`);
-        added.push(...got);
+        parsedFiles.push({ name: f.name, parsed: JSON.parse(await f.text()) });
       } catch (err) {
         const message = err instanceof Error ? err.message : 'JSON 파싱 실패';
         errors.push(`${f.name}: ${message}`);
+      }
+    }
+
+    const importedTicketPrices = mergeTicketPrices(parsedFiles.map(({ parsed }) => extractTicketPrices(parsed)));
+    for (const { name, parsed } of parsedFiles) {
+      try {
+        if (isTicketExport(parsed)) continue;
+        const manualTicketPrices = collectTicketPrices(parsed, importedTicketPrices);
+        const ticketPrices = { ...importedTicketPrices, ...manualTicketPrices };
+        const got = parseBankrollFile(parsed, { ticketPrices });
+        if (got.length === 0) errors.push(`${name}: 인식 가능한 항목 없음`);
+        added.push(...got);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : '처리 실패';
+        errors.push(`${name}: ${message}`);
       }
     }
     if (inputRef.current) inputRef.current.value = '';
@@ -337,7 +347,7 @@ export function BankrollPage() {
                         </td>
                         <td className="whitespace-nowrap px-2 py-2 align-top">
                           <span className={`rounded px-2 py-1 text-[11px] uppercase ${missingTicketPrice ? 'bg-red-900/70 text-red-100 ring-1 ring-red-500/70' : 'bg-gray-800 text-gray-300'}`}>
-                            {session.isTicket ? 'ticket' : session.kind}
+                            {session.isTicket ? 'ticket prize' : session.kind}
                           </span>
                         </td>
                         <td className="px-2 py-2 align-top">
@@ -364,17 +374,43 @@ export function BankrollPage() {
                           {session.kind === 'tournament' ? (
                             isEditing ? (
                               <div className="flex flex-col items-end gap-1">
-                                <NumberInput
-                                  value={session.isTicket ? draft.ticketPrice : draft.buyIn}
-                                  onChange={(value) => setDraft(session.isTicket ? { ...draft, ticketPrice: value } : { ...draft, buyIn: value })}
-                                  min={0}
-                                  invalid={editingMissingTicketPrice}
-                                />
+                                {session.isTicket ? (
+                                  <>
+                                    <label className="flex items-center justify-end gap-2">
+                                      <span className="text-[11px] text-gray-500">Cost</span>
+                                      <NumberInput
+                                        value={draft.buyIn}
+                                        onChange={(value) => setDraft({ ...draft, buyIn: value })}
+                                        min={0}
+                                      />
+                                    </label>
+                                    <label className="flex items-center justify-end gap-2">
+                                      <span className="text-[11px] text-gray-500">Ticket</span>
+                                      <NumberInput
+                                        value={draft.ticketPrice}
+                                        onChange={(value) => setDraft({ ...draft, ticketPrice: value })}
+                                        min={0}
+                                        invalid={editingMissingTicketPrice}
+                                      />
+                                    </label>
+                                  </>
+                                ) : (
+                                  <NumberInput
+                                    value={draft.buyIn}
+                                    onChange={(value) => setDraft({ ...draft, buyIn: value })}
+                                    min={0}
+                                  />
+                                )}
                                 {editingMissingTicketPrice && <span className="text-[11px] font-semibold text-red-300">티켓 가격 필요</span>}
                               </div>
                             ) : (
                               <span className={missingTicketPrice ? 'font-semibold text-red-300' : undefined}>
-                                {missingTicketPrice ? '티켓 가격 필요' : formatUsd(session.isTicket ? (session.ticketPrice ?? session.buyIn ?? 0) : (session.buyIn ?? 0))}
+                                {missingTicketPrice ? '티켓 가격 필요' : session.isTicket ? (
+                                  <span className="flex flex-col items-end gap-0.5">
+                                    <span>Cost {formatUsd(session.buyIn ?? 0)}</span>
+                                    <span className="text-green-300">Ticket +{formatUsd(session.ticketPrice ?? 0)}</span>
+                                  </span>
+                                ) : formatUsd(session.buyIn ?? 0)}
                               </span>
                             )
                           ) : (
@@ -440,7 +476,10 @@ export function BankrollPage() {
   );
 }
 
-function collectTicketPrices(parsed: unknown): Record<string, number> | null {
+function collectTicketPrices(
+  parsed: unknown,
+  knownTicketPrices: Record<string, number> = {},
+): Record<string, number> {
   if (!Array.isArray(parsed) || parsed.length === 0) return {};
   const first = parsed[0] as Record<string, unknown>;
   if (!first || !('tournament_id' in first)) return {};
@@ -451,6 +490,7 @@ function collectTicketPrices(parsed: unknown): Record<string, number> | null {
       typeof row?.tournament_id === 'string' &&
       row.tournament_id.length > 0 &&
       isTicketValue(row.is_ticket) &&
+      findTicketPrice(row.tournament_id, row.tournament_name, knownTicketPrices) === null &&
       !ticketRows.has(row.tournament_id)
     ) {
       ticketRows.set(row.tournament_id, row);
@@ -461,24 +501,38 @@ function collectTicketPrices(parsed: unknown): Record<string, number> | null {
   const prices: Record<string, number> = {};
   for (const [id, row] of ticketRows) {
     const label = row.tournament_name || id;
-    const fallback = String(row.buy_in ?? '0');
-    const promptText = `${label}\n티켓으로 참가한 토너먼트입니다. 실제 티켓 가격(USD)을 입력하세요.`;
-    let value: number | null = null;
-
-    while (value === null) {
-      const input = window.prompt(promptText, fallback);
-      if (input === null) return null;
-      const parsedPrice = Number.parseFloat(input.replace(/,/g, '').trim());
-      if (Number.isFinite(parsedPrice) && parsedPrice >= 0) {
-        value = parsedPrice;
-      } else {
-        window.alert('0 이상의 숫자로 입력해주세요.');
-      }
+    const promptText = `${label}\n티켓으로 상금을 받은 토너먼트입니다. 획득한 티켓 가격(USD)을 입력하세요. 비워두면 기록만 저장되고 강조 표시됩니다.`;
+    const input = window.prompt(promptText, '');
+    if (input === null || input.trim() === '') continue;
+    const parsedPrice = Number.parseFloat(input.replace(/,/g, '').trim());
+    if (Number.isFinite(parsedPrice) && parsedPrice >= 0) {
+      prices[id] = parsedPrice;
+    } else {
+      window.alert('0 이상의 숫자로 입력해주세요. 이 기록은 티켓 가격 없이 저장됩니다.');
     }
-    prices[id] = value;
   }
 
   return prices;
+}
+
+function mergeTicketPrices(priceMaps: Record<string, number>[]): Record<string, number> {
+  return Object.assign({}, ...priceMaps);
+}
+
+function isTicketExport(parsed: unknown): boolean {
+  if (!Array.isArray(parsed) || parsed.length === 0) return false;
+  return parsed.some((row) => {
+    const candidate = row as Record<string, unknown>;
+    return (
+      candidate &&
+      'ticketAmount' in candidate &&
+      (
+        'selectedEligibleTournamentId' in candidate ||
+        'eligibleTournaments' in candidate ||
+        'ticketList' in candidate
+      )
+    );
+  });
 }
 
 interface SessionDraft {
@@ -497,7 +551,7 @@ function sessionToDraft(session: BankrollSession): SessionDraft {
     name: session.name ?? '',
     winLoss: String(session.winLoss),
     buyIn: String(session.buyIn ?? 0),
-    ticketPrice: hasMissingTicketPrice(session) ? '' : String(session.ticketPrice ?? session.buyIn ?? 0),
+    ticketPrice: session.isTicket ? String(session.ticketPrice ?? '') : '',
     entries: String(session.entries ?? 1),
     rank: session.rank === undefined ? '' : String(session.rank),
   };
@@ -542,7 +596,7 @@ function draftToSession(
       datetime,
       name: draft.name.trim() || original.name,
       winLoss,
-      buyIn: original.isTicket ? resolvedTicketPrice : buyIn,
+      buyIn,
       ticketPrice: resolvedTicketPrice,
       entries,
       rank,
