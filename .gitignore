@@ -30,3 +30,6 @@ public/gto-preflop-charts-all.json
 .vercel
 .env*
 !.env.example
+
+# Local worktrees
+.worktrees/
