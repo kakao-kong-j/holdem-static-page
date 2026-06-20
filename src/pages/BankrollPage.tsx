@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import {
-  parseBankrollFile,
   dedupeSessions,
   computeTrend,
   computeTagPerformance,
@@ -17,40 +16,33 @@ import {
   type RawTournament,
 } from '../utils/bankroll';
 import { fetchUsdKrwRate } from '../utils/fxRate';
-import {
-  fetchBankrollSessions,
-  pushBankrollSessions,
-  replaceBankrollSessions,
-  clearBankroll,
-  flattenStore,
-} from '../utils/bankrollSync';
 import { BankrollTrendChart } from '../components/BankrollTrendChart';
 import { TagPerformanceChart } from '../components/TagPerformanceChart';
+import { useBankrollStore } from './bankroll/useBankrollStore';
 
 export function BankrollPage() {
-  const [sessions, setSessions] = useState<BankrollSession[]>([]);
+  const {
+    sessions,
+    setSessions,
+    loading,
+    syncing,
+    setSyncing,
+    parseBankrollFile,
+    clearBankroll,
+    pushBankrollSessions,
+    replaceBankrollSessions,
+    flattenBankrollStore,
+  } = useBankrollStore();
   const [rate, setRate] = useState<number | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
-  const [syncing, setSyncing] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<SessionDraft | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     fetchUsdKrwRate().then(setRate).catch(() => {});
-  }, []);
-
-  // Seed from the server-side store on mount (no-op offline / no /api).
-  useEffect(() => {
-    let cancelled = false;
-    fetchBankrollSessions()
-      .then((store) => { if (!cancelled) setSessions(dedupeSessions(flattenStore(store))); })
-      .catch(() => { /* offline / no /api — start empty */ })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
   }, []);
 
   const bounds = useMemo(() => dateBounds(sessions), [sessions]);
@@ -106,7 +98,7 @@ export function BankrollPage() {
     setSyncing(true);
     try {
       const store = await pushBankrollSessions(added);
-      setSessions(dedupeSessions(flattenStore(store)));
+      setSessions(flattenBankrollStore(store));
     } catch {
       /* offline / no /api — keep the optimistic local state */
     } finally {
@@ -155,7 +147,7 @@ export function BankrollPage() {
     setSyncing(true);
     try {
       const store = await pushBankrollSessions([updated]);
-      setSessions(dedupeSessions(flattenStore(store)));
+      setSessions(flattenBankrollStore(store));
     } catch {
       /* offline / no /api — keep the optimistic local state */
     } finally {
@@ -172,7 +164,7 @@ export function BankrollPage() {
     setSyncing(true);
     try {
       const store = await replaceBankrollSessions(session.kind, remainingKind);
-      setSessions(dedupeSessions(flattenStore(store)));
+      setSessions(flattenBankrollStore(store));
     } catch {
       /* offline / no /api — keep the optimistic local state */
     } finally {
