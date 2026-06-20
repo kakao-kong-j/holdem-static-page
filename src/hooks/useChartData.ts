@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { AllData } from '../types';
+import { validateChartDataPayload } from '../utils/chartDataValidation';
 
 export function useChartData(enabled: boolean) {
   const [data, setData] = useState<AllData | null>(null);
@@ -16,7 +17,7 @@ export function useChartData(enabled: boolean) {
         return res.json();
       })
       .then(json => {
-        setData(json.data as AllData);
+        setData(validateChartDataPayload(json));
         setLoading(false);
       })
       .catch(err => {
