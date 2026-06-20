@@ -41,12 +41,6 @@ function App() {
   const [view, setView] = useState<View>('open-range');
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  useEffect(() => {
-    if (view === 'sb-open' && SB_OPEN_DISABLED_STACKS.includes(stack)) {
-      setStack('100BB');
-    }
-  }, [view, stack]);
-
   // On login, reconcile local quiz records with the server-side store.
   useEffect(() => {
     if (!isAuthenticated) return;

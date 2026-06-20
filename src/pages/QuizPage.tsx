@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { ACTION_COLORS, POSITION_COLORS, STACK_SIZES } from '../constants';
 import { generateQuizQuestion, saveQuizRecord, actionLabel, loadQuizRecords } from '../utils/quiz';
 import { pushQuizRecords } from '../utils/recordsSync';
@@ -18,11 +18,27 @@ interface Props {
 }
 
 export function QuizPage({ data }: Props) {
-  const [phase, setPhase] = useState<Phase>('settings');
+  const [initialPendingReview] = useState<{ question: QuizQuestion; choices: string[] } | null>(() => {
+    const pending = sessionStorage.getItem('pendingReview');
+    if (!pending) return null;
+    sessionStorage.removeItem('pendingReview');
+    try {
+      const q = JSON.parse(pending) as QuizQuestion;
+      const chart = data[q.stackSize]?.[q.chartName];
+      if (!chart) return null;
+      const actions = Object.keys(chart);
+      if (!actions.includes('fold')) actions.push('fold');
+      return { question: q, choices: actions };
+    } catch {
+      return null;
+    }
+  });
+
+  const [phase, setPhase] = useState<Phase>(initialPendingReview ? 'question' : 'settings');
   const [selectedStacks, setSelectedStacks] = useState<StackSize[]>([...STACK_SIZES]);
   const [chartFilter, setChartFilter] = useState<QuizChartFilter>('both');
-  const [question, setQuestion] = useState<QuizQuestion | null>(null);
-  const [choices, setChoices] = useState<string[]>([]);
+  const [question, setQuestion] = useState<QuizQuestion | null>(initialPendingReview?.question ?? null);
+  const [choices, setChoices] = useState<string[]>(initialPendingReview?.choices ?? []);
   const [userAnswer, setUserAnswer] = useState('');
   const [correct, setCorrect] = useState(0);
   const [total, setTotal] = useState(0);
@@ -42,45 +58,26 @@ export function QuizPage({ data }: Props) {
     setPhase('question');
   }, [data, selectedStacks, chartFilter]);
 
-  // pendingReview: 통계 페이지에서 "복습" 버튼으로 넘어왔을 때 해당 문제 즉시 출제
-  useEffect(() => {
-    const pending = sessionStorage.getItem('pendingReview');
-    if (!pending) return;
-    sessionStorage.removeItem('pendingReview');
-    try {
-      const q = JSON.parse(pending) as QuizQuestion;
-      const chart = data[q.stackSize]?.[q.chartName];
-      if (!chart) return;
-      const actions = Object.keys(chart);
-      if (!actions.includes('fold')) actions.push('fold');
-      setQuestion(q);
-      setChoices(actions);
-      setUserAnswer('');
-      setPhase('question');
-    } catch {
-      /* ignore malformed */
-    }
-  }, [data]);
-
-  const handleAnswer = (action: string) => {
+  const handleAnswer = useCallback((action: string) => {
     if (!question) return;
     const isCorrect = action === question.correctAction;
     setUserAnswer(action);
     if (isCorrect) setCorrect(c => c + 1);
     setTotal(t => t + 1);
 
+    const now = Date.now();
     const record: QuizRecord = {
       question,
       userAnswer: action,
       correct: isCorrect,
-      timestamp: Date.now(),
+      timestamp: now,
     };
     saveQuizRecord(record);
     pushQuizRecords([record]).catch(() => {
       /* offline or /api unavailable — record stays in localStorage */
     });
     setPhase('result');
-  };
+  }, [question]);
 
   if (phase === 'settings') {
     return (
