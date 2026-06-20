@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-GTO (Game Theory Optimal) preflop charts visualization app for poker. Displays 13x13 hand grids showing optimal actions per position/stack depth. Korean UI. Deployed on Vercel (primary; Google login + per-user data via serverless `/api`); a chart-only mirror can run on GitHub Pages.
+GTO (Game Theory Optimal) preflop charts visualization app for poker. Displays 13x13 hand grids showing optimal actions per position/stack depth. Korean UI. Deployed on Vercel (active; Google login + per-user data via serverless `/api`); GitHub Pages deployment has been removed.
 
 ## Tech Stack
 
@@ -12,13 +12,13 @@ GTO (Game Theory Optimal) preflop charts visualization app for poker. Displays 1
 - Tailwind CSS (via @tailwindcss/vite)
 - No external charting libraries (grids are custom-built)
 - Vercel Functions (`/api`) for auth + user data; `jose` (JWT), `@vercel/blob` (storage)
-- Deploy: Vercel (primary) / GitHub Pages (chart-only mirror)
+- Deploy: Vercel (active); GitHub Pages deployment removed
 
 ## Build & Dev Commands
 
 ```bash
 npm install
-npm run dev        # Vite dev server (base: /holdem-static-page/)
+npm run dev        # Vite dev server (base: /)
 npm run build      # Production build → dist/
 npm run preview    # Preview production build
 ```
@@ -90,15 +90,11 @@ Historical note: prior revisions of this doc listed combined totals (e.g. 1020/3
 
 ## Deployment
 
-**Vercel** (primary — required for login/user data):
-- Config: `vercel.json` (framework=vite, buildCommand=`npm run build:vercel`); SPA rewrite excludes `/api` (`/((?!api/).*)`)
+**Vercel** (active):
+- Config: `vercel.json` (framework=vite, buildCommand=`npm run build:vercel`)
 - Root-domain serve → Vite `base` falls back to `/` when `VERCEL=1` is set
+- Required env vars in Vercel dashboard: `DATA_KEY` (for `openssl` decrypt), `VITE_PASSWORD_HASH`
 - Same source data (`public/gto-preflop-charts-all.json.enc`) decrypted at build
-- Required env vars: `DATA_KEY` (openssl decrypt), `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `JWT_SECRET`, `PAGE_PASSWORD_HASH` (sha256 hex of the page password); `BLOB_READ_WRITE_TOKEN` auto-injected when a Blob store is linked. Optional `GOOGLE_REDIRECT_URI`. See `.env.example`.
-- Google Cloud Console: register redirect URI `https://<domain>/api/auth/google/callback`
 
-**GitHub Pages** (public/chart-only — no login):
-- Workflow: `.github/workflows/deploy.yml`
-- Vite `base: '/holdem-static-page/'` (subpath)
-- Push to `main` triggers auto-deploy
-- `/api` is unavailable here, so the Google-login flow cannot run; treat this as a chart-only mirror (or retire it). The legacy `VITE_PASSWORD_HASH` env var is no longer used by the app.
+**GitHub Pages**:
+- Removed. The app now depends on Vercel API routes for Google auth and server-side persistence, so GitHub Pages is no longer a supported deployment target.
