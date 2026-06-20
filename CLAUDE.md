@@ -92,8 +92,10 @@ Historical note: prior revisions of this doc listed combined totals (e.g. 1020/3
 
 **Vercel** (active):
 - Config: `vercel.json` (framework=vite, buildCommand=`npm run build:vercel`)
-- Root-domain serve → Vite `base` falls back to `/` when `VERCEL=1` is set
-- Required env vars in Vercel dashboard: `DATA_KEY` (for `openssl` decrypt), `VITE_PASSWORD_HASH`
+- Vite serves from the root path (`base: '/'`)
+- Required env vars in Vercel dashboard: `DATA_KEY` (for `openssl` decrypt), `PAGE_PASSWORD_HASH`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `JWT_SECRET`
+- Optional env var: `GOOGLE_REDIRECT_URI` (callback URL is derived from the request host when unset)
+- Vercel Blob: link a Blob store so `BLOB_READ_WRITE_TOKEN` is auto-injected; set it manually only for local `vercel dev` against a remote store
 - Same source data (`public/gto-preflop-charts-all.json.enc`) decrypted at build
 
 **GitHub Pages**:
