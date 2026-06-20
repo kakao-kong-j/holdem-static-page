@@ -24,7 +24,7 @@ import {
 import { WEAKNESS_MAP, ALL_TAGS, type WeaknessId } from '../utils/weaknessMap';
 import { QuizCompareSection } from '../components/QuizCompareSection';
 import type { AllData, QuizRecord } from '../types';
-import type { NavigateIntent } from '../App';
+import type { NavigateIntent } from '../app/viewRegistry';
 
 type Filter = { type: 'stack'; value: string } | { type: 'position'; value: string } | null;
 
