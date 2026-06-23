@@ -1,4 +1,4 @@
-import type { BankrollSession } from './bankroll';
+import { recalculateSessionProfit, type BankrollSession } from './bankroll';
 
 const ENDPOINT = '/api/bankroll';
 
@@ -18,7 +18,7 @@ function normalize(data: unknown): BankrollStore {
 }
 
 export function flattenStore(store: BankrollStore): BankrollSession[] {
-  return [...store.cash, ...store.tournament];
+  return [...store.cash, ...store.tournament.map(recalculateSessionProfit)];
 }
 
 /** Load the stored cash + tournament sessions for the logged-in user. */
