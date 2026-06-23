@@ -7,11 +7,24 @@ export interface SessionUser {
   picture?: string;
 }
 
+const LOCAL_DEV_USER: SessionUser = {
+  sub: 'local-dev',
+  name: 'Local Dev',
+  email: 'local@example.com',
+};
+
+function isLocalAuthBypass(): boolean {
+  return import.meta.env.DEV && import.meta.env.VITE_LOCAL_AUTH_BYPASS === '1';
+}
+
 export function useAuth() {
-  const [user, setUser] = useState<SessionUser | null>(null);
-  const [checking, setChecking] = useState(true);
+  const localAuthBypass = isLocalAuthBypass();
+  const [user, setUser] = useState<SessionUser | null>(localAuthBypass ? LOCAL_DEV_USER : null);
+  const [checking, setChecking] = useState(!localAuthBypass);
 
   useEffect(() => {
+    if (localAuthBypass) return;
+
     let cancelled = false;
     fetch('/api/auth/me', { credentials: 'include' })
       .then(res => (res.ok ? res.json() : null))
@@ -27,9 +40,14 @@ export function useAuth() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [localAuthBypass]);
 
   const logout = useCallback(async () => {
+    if (localAuthBypass) {
+      setUser(LOCAL_DEV_USER);
+      return;
+    }
+
     try {
       await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
     } catch {
@@ -37,7 +55,7 @@ export function useAuth() {
     }
     setUser(null);
     window.location.reload();
-  }, []);
+  }, [localAuthBypass]);
 
   return { user, isAuthenticated: !!user, checking, logout };
 }
