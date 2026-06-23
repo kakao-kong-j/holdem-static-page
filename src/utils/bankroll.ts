@@ -178,7 +178,6 @@ export function normalizeTournamentSessions(
     const isTicket = isTicketValue(r.is_ticket);
     const ticketPrice = isTicket ? findTicketPrice(id, r.tournament_name, options?.ticketPrices) : null;
     const buyIn = num(r.buy_in);
-    // `?? 1` would miss a literal 0 (malformed/partial export) → buyIn*0 = 0 cost.
     const entries = r.total_no_of_entries > 0 ? r.total_no_of_entries : 1;
     const winLoss = num(r.win_loss);
     const ticketPrize = isTicket ? (ticketPrice ?? 0) : 0;
@@ -186,7 +185,7 @@ export function normalizeTournamentSessions(
       id,
       kind: 'tournament' as const,
       datetime: r.start_datetime,
-      profit: winLoss + ticketPrize - buyIn * entries,
+      profit: winLoss + ticketPrize - buyIn,
       winLoss,
       buyIn,
       entries,
@@ -228,7 +227,7 @@ export function recalculateSessionProfit(session: BankrollSession): BankrollSess
     ...session,
     buyIn,
     entries,
-    profit: session.winLoss + ticketPrize - buyIn * entries,
+    profit: session.winLoss + ticketPrize - buyIn,
   };
 }
 
@@ -246,6 +245,15 @@ export interface Summary {
   cashProfit: number;
   tournamentProfit: number;
   sessionCount: number;
+}
+export interface TournamentMetrics {
+  games: number;
+  totalBuyIn: number;
+  roi: number | null;
+  abi: number | null;
+  itmRate: number | null;
+  finalTableRate: number | null;
+  top3Rate: number | null;
 }
 
 /**
@@ -287,6 +295,26 @@ export function computeTrend(sessions: BankrollSession[]): TrendPoint[] {
     acc += s.profit;
     return { datetime: s.datetime, value: acc };
   });
+}
+
+export function computeTournamentMetrics(sessions: BankrollSession[]): TournamentMetrics {
+  const tournaments = sessions.filter((s) => s.kind === 'tournament');
+  const games = tournaments.length;
+  const totalBuyIn = tournaments.reduce((sum, s) => sum + (s.buyIn ?? 0), 0);
+  const tournamentProfit = tournaments.reduce((sum, s) => sum + s.profit, 0);
+  const itm = tournaments.filter((s) => s.winLoss + (s.ticketPrice ?? 0) > 0).length;
+  const finalTables = tournaments.filter((s) => typeof s.rank === 'number' && s.rank <= 9).length;
+  const top3 = tournaments.filter((s) => typeof s.rank === 'number' && s.rank <= 3).length;
+
+  return {
+    games,
+    totalBuyIn,
+    roi: totalBuyIn > 0 ? tournamentProfit / totalBuyIn : null,
+    abi: games > 0 ? totalBuyIn / games : null,
+    itmRate: games > 0 ? itm / games : null,
+    finalTableRate: games > 0 ? finalTables / games : null,
+    top3Rate: games > 0 ? top3 / games : null,
+  };
 }
 
 const TAG_PRIORITY = ['CoinPoker', 'Tournament History', 'Cash History'];

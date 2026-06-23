@@ -8,6 +8,7 @@ import {
   filterByDateRange,
   dateBounds,
   computeTagPerformance,
+  computeTournamentMetrics,
   summarize,
   formatUsd,
   recalculateSessionProfit,
@@ -42,10 +43,10 @@ describe('normalizeCashSessions', () => {
 });
 
 describe('normalizeTournamentSessions', () => {
-  it('computes net = win_loss - buy_in * entries and tags', () => {
+  it('computes net = win_loss - total buy_in and tags', () => {
     const out = normalizeTournamentSessions(tourneys);
     expect(out.find(s => s.id === 't1')!.profit).toBeCloseTo(41.54, 5);
-    expect(out.find(s => s.id === 't2')!.profit).toBeCloseTo(-3.6, 5);
+    expect(out.find(s => s.id === 't2')!.profit).toBeCloseTo(-1.2, 5);
     expect(out.find(s => s.id === 't1')!.tags).toEqual(['CoinPoker', 'Tournament History']);
   });
 
@@ -201,6 +202,27 @@ describe('computeTrend', () => {
   });
 });
 
+describe('computeTournamentMetrics', () => {
+  it('summarizes ROI, ABI, ITM, final table, and top 3 from tournaments only', () => {
+    const metrics = computeTournamentMetrics([
+      ...normalizeCashSessions(cash),
+      ...normalizeTournamentSessions([
+        { tournament_id: 'a', tournament_name: 'a', minigames_type_id: 1, start_datetime: '2026-06-01 00:00:00', internal_ref: 'a', buy_in: '2', win_loss: '8', rank: 1, total_no_of_entries: 1 },
+        { tournament_id: 'b', tournament_name: 'b', minigames_type_id: 1, start_datetime: '2026-06-02 00:00:00', internal_ref: 'b', buy_in: '3', win_loss: '0', rank: 9, total_no_of_entries: 1 },
+        { tournament_id: 'c', tournament_name: 'c', minigames_type_id: 1, start_datetime: '2026-06-03 00:00:00', internal_ref: 'c', buy_in: '5', win_loss: '0', rank: 20, total_no_of_entries: 1 },
+      ]),
+    ]);
+
+    expect(metrics.games).toBe(3);
+    expect(metrics.totalBuyIn).toBeCloseTo(10, 5);
+    expect(metrics.roi).toBeCloseTo(-0.2, 5);
+    expect(metrics.abi).toBeCloseTo(10 / 3, 5);
+    expect(metrics.itmRate).toBeCloseTo(1 / 3, 5);
+    expect(metrics.finalTableRate).toBeCloseTo(2 / 3, 5);
+    expect(metrics.top3Rate).toBeCloseTo(1 / 3, 5);
+  });
+});
+
 describe('filterByDateRange', () => {
   it('returns all when both bounds empty', () => {
     expect(filterByDateRange(all, '', '')).toHaveLength(all.length);
@@ -240,7 +262,7 @@ describe('summarize', () => {
     const s = summarize(all);
     expect(s.sessionCount).toBe(5);
     expect(s.cashProfit).toBeCloseTo(0.67 - 0.02 + 2.16, 5);
-    expect(s.tournamentProfit).toBeCloseTo(41.54 - 3.6, 5);
+    expect(s.tournamentProfit).toBeCloseTo(41.54 - 1.2, 5);
     expect(s.totalProfit).toBeCloseTo(s.cashProfit + s.tournamentProfit, 5);
   });
 });
@@ -268,6 +290,16 @@ describe('recalculateSessionProfit', () => {
 
     expect(updated.buyIn).toBeCloseTo(0, 5);
     expect(updated.profit).toBeCloseTo(26, 5);
+  });
+
+  it('uses edited buyIn as total cost, not per-entry cost', () => {
+    const [session] = normalizeTournamentSessions([
+      { tournament_id: 'rebuy-edit', tournament_name: 'Rebuy', minigames_type_id: 1, start_datetime: '2026-06-12 18:00:00', internal_ref: 'r-rebuy', buy_in: '2.20', win_loss: '5.79', total_no_of_entries: 2 },
+    ]);
+
+    const updated = recalculateSessionProfit({ ...session, buyIn: 3, entries: 4 });
+
+    expect(updated.profit).toBeCloseTo(2.79, 5);
   });
 });
 
@@ -319,12 +351,12 @@ describe('reference dataset invariants', () => {
     expect(byTag('Cash History').sessions).toBe(10);
   });
 
-  it('tournament net = win_loss - buy_in * entries', () => {
+  it('tournament net = win_loss - total buy_in', () => {
     const t = normalizeTournamentSessions([
       { tournament_id: 'big', tournament_name: 'x', minigames_type_id: 1, start_datetime: '2026-06-07 06:05:00', internal_ref: 'i', buy_in: '1.10', win_loss: '42.64', total_no_of_entries: 1 },
       { tournament_id: 'reb', tournament_name: 'y', minigames_type_id: 1, start_datetime: '2026-06-08 06:05:00', internal_ref: 'j', buy_in: '2.20', win_loss: '5.79', total_no_of_entries: 2 },
     ]);
     expect(t.find(s => s.id === 'big')!.profit).toBeCloseTo(41.54, 2);
-    expect(t.find(s => s.id === 'reb')!.profit).toBeCloseTo(1.39, 2);
+    expect(t.find(s => s.id === 'reb')!.profit).toBeCloseTo(3.59, 2);
   });
 });

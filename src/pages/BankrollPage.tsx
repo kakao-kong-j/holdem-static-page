@@ -4,6 +4,7 @@ import {
   dedupeSessions,
   computeTrend,
   computeTagPerformance,
+  computeTournamentMetrics,
   filterByDateRange,
   dateBounds,
   summarize,
@@ -60,6 +61,7 @@ export function BankrollPage() {
   );
   const trend = useMemo(() => computeTrend(filtered), [filtered]);
   const tags = useMemo(() => computeTagPerformance(filtered), [filtered]);
+  const mtt = useMemo(() => computeTournamentMetrics(filtered), [filtered]);
   const sum = useMemo(() => summarize(filtered), [filtered]);
   const listedSessions = useMemo(
     () => [...filtered].sort((a, b) => b.datetime.localeCompare(a.datetime)),
@@ -290,6 +292,17 @@ export function BankrollPage() {
 
           <Section title="Trend line" right={`${trend.length} points`}>
             <BankrollTrendChart points={trend} />
+          </Section>
+
+          <Section title="MTT Metrics" right={`${mtt.games} games`}>
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
+              <Card label="ROI" value={formatPercent(mtt.roi)} />
+              <Card label="ABI" value={mtt.abi === null ? '-' : formatUsd(mtt.abi)} />
+              <Card label="MTT GAMES" value={String(mtt.games)} />
+              <Card label="ITM" value={formatPercent(mtt.itmRate)} />
+              <Card label="FINAL TABLE" value={formatPercent(mtt.finalTableRate)} />
+              <Card label="TOP 3" value={formatPercent(mtt.top3Rate)} />
+            </div>
           </Section>
 
           <Section title="Tag performance" right={`${tags.length} tags`}>
@@ -649,6 +662,10 @@ function NumberInput({
       className={`w-24 rounded border bg-gray-950 px-2 py-1 text-right text-gray-200 ${invalid ? 'border-red-500 ring-1 ring-red-500/60' : 'border-gray-700'}`}
     />
   );
+}
+
+function formatPercent(value: number | null): string {
+  return value === null ? '-' : `${(value * 100).toFixed(1)}%`;
 }
 
 function Card({ label, value }: { label: string; value: string }) {
