@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { RangeGrid } from '../components/RangeGrid';
 import { Legend } from '../components/Legend';
 import { ACTION_COLORS } from '../constants';
@@ -51,60 +51,34 @@ export function FacingPage({ stackData }: Props) {
   const [villain, setVillain] = useState(initialFromPending?.v ?? '');
   const [selectedChart, setSelectedChart] = useState(initialFromPending?.chartName ?? '');
 
-  // 카테고리 유효성
-  useEffect(() => {
-    if (!scenarioMap.categories.includes(category)) {
-      setCategory(scenarioMap.categories[0]);
-    }
-  }, [scenarioMap, category]);
+  const effectiveCategory = scenarioMap.categories.includes(category)
+    ? category
+    : scenarioMap.categories[0];
 
   // 카테고리별 히어로 목록
   const heroPositions = useMemo(
-    () => getHeroPositions(scenarioMap, category),
-    [scenarioMap, category]
+    () => (effectiveCategory ? getHeroPositions(scenarioMap, effectiveCategory) : []),
+    [scenarioMap, effectiveCategory]
   );
-
-  // 히어로 유효성: 현재 hero가 새 목록에 없으면만 첫 항목으로
-  useEffect(() => {
-    if (!heroPositions.includes(hero)) {
-      setHero(heroPositions[0] ?? '');
-    }
-  }, [heroPositions, hero]);
+  const effectiveHero = heroPositions.includes(hero) ? hero : (heroPositions[0] ?? '');
 
   // 히어로별 빌런 목록
   const villainOptions = useMemo(
-    () => (hero ? getVillainOptions(scenarioMap, hero, category) : []),
-    [scenarioMap, hero, category]
+    () => (effectiveHero && effectiveCategory ? getVillainOptions(scenarioMap, effectiveHero, effectiveCategory) : []),
+    [scenarioMap, effectiveHero, effectiveCategory]
   );
-
-  // 빌런 유효성: 현재 villain이 새 목록에 없으면만 첫 항목으로
-  useEffect(() => {
-    if (!villainOptions.includes(villain)) {
-      setVillain(villainOptions[0] ?? '');
-    }
-  }, [villainOptions, villain]);
-
-  // 차트 유효성: 현재 selectedChart가 (hero, villain, category) 시나리오 안에 없으면만 첫 항목으로
-  useEffect(() => {
-    if (!hero || !villain) return;
-    const s = getScenarios(scenarioMap, hero, villain, category);
-    if (!s.some(x => x.chartName === selectedChart)) {
-      setSelectedChart(s[0]?.chartName ?? '');
-    }
-  }, [scenarioMap, hero, villain, category, selectedChart]);
+  const effectiveVillain = villainOptions.includes(villain) ? villain : (villainOptions[0] ?? '');
 
   const scenarios: Scenario[] = useMemo(() => {
-    if (!hero || !villain) return [];
-    return getScenarios(scenarioMap, hero, villain, category);
-  }, [scenarioMap, hero, villain, category]);
+    if (!effectiveHero || !effectiveVillain || !effectiveCategory) return [];
+    return getScenarios(scenarioMap, effectiveHero, effectiveVillain, effectiveCategory);
+  }, [scenarioMap, effectiveHero, effectiveVillain, effectiveCategory]);
+  const effectiveSelectedChart = scenarios.some(s => s.chartName === selectedChart)
+    ? selectedChart
+    : (scenarios[0]?.chartName ?? '');
 
-  const handleVillainChange = (v: string) => {
-    setVillain(v);
-    const s = v ? getScenarios(scenarioMap, hero, v, category) : [];
-    setSelectedChart(s[0]?.chartName ?? '');
-  };
-
-  const chartData = stackData[selectedChart];
+  const selectedScenario = scenarios.find(s => s.chartName === effectiveSelectedChart);
+  const chartData = stackData[effectiveSelectedChart];
   const handAction = useMemo(
     () => (chartData ? buildHandAction(chartData) : {}),
     [chartData]
@@ -127,7 +101,7 @@ export function FacingPage({ stackData }: Props) {
             key={c}
             onClick={() => setCategory(c)}
             className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
-              category === c
+              effectiveCategory === c
                 ? 'bg-blue-600 text-white'
                 : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-300'
             }`}
@@ -142,7 +116,7 @@ export function FacingPage({ stackData }: Props) {
         <div className="flex items-center gap-2">
           <label className="text-sm text-gray-400 font-medium">나</label>
           <select
-            value={hero}
+            value={effectiveHero}
             onChange={e => setHero(e.target.value)}
             className={selectClass}
           >
@@ -157,8 +131,8 @@ export function FacingPage({ stackData }: Props) {
         <div className="flex items-center gap-2">
           <label className="text-sm text-gray-400 font-medium">빌런</label>
           <select
-            value={villain}
-            onChange={e => handleVillainChange(e.target.value)}
+            value={effectiveVillain}
+            onChange={e => setVillain(e.target.value)}
             className={selectClass}
           >
             {villainOptions.map(p => (
@@ -176,7 +150,7 @@ export function FacingPage({ stackData }: Props) {
               key={s.chartName}
               onClick={() => setSelectedChart(s.chartName)}
               className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
-                selectedChart === s.chartName
+                effectiveSelectedChart === s.chartName
                   ? 'bg-blue-600 text-white'
                   : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-300'
               }`}
@@ -188,8 +162,8 @@ export function FacingPage({ stackData }: Props) {
         </div>
       )}
 
-      {selectedChart && (
-        <h3 className="text-base font-bold text-white mb-3">{selectedChart}</h3>
+      {effectiveSelectedChart && (
+        <h3 className="text-base font-bold text-white mb-3">{selectedScenario?.chartName ?? effectiveSelectedChart}</h3>
       )}
 
       {chartData ? (

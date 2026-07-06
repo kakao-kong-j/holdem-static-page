@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { RangeGrid } from './RangeGrid';
 import { OPEN_RANGE_POSITIONS, SB_RFI_BVB_CHART, SB_RFI_CHART, STACK_SIZES } from '../constants';
 import { buildHandAction, buildOpenRangeData } from '../utils/hand';
@@ -73,33 +73,21 @@ export function QuizCompareSection({ data, records }: Props) {
   const [villain, setVillain] = useState('');
   const [selectedChart, setSelectedChart] = useState('');
 
-  useEffect(() => {
-    if (!heroPositions.includes(hero)) {
-      setHero(heroPositions[0] ?? '');
-    }
-  }, [heroPositions, hero]);
+  const effectiveHero = heroPositions.includes(hero) ? hero : (heroPositions[0] ?? '');
 
   const villainOptions = useMemo(
-    () => (hero ? getVillainOptions(scenarioMap, hero, FACING_CATEGORY) : []),
-    [scenarioMap, hero],
+    () => (effectiveHero ? getVillainOptions(scenarioMap, effectiveHero, FACING_CATEGORY) : []),
+    [scenarioMap, effectiveHero],
   );
-
-  useEffect(() => {
-    if (!villainOptions.includes(villain)) {
-      setVillain(villainOptions[0] ?? '');
-    }
-  }, [villainOptions, villain]);
+  const effectiveVillain = villainOptions.includes(villain) ? villain : (villainOptions[0] ?? '');
 
   const scenarios = useMemo(() => {
-    if (!hero || !villain) return [];
-    return getScenarios(scenarioMap, hero, villain, FACING_CATEGORY);
-  }, [scenarioMap, hero, villain]);
-
-  useEffect(() => {
-    if (!scenarios.some(s => s.chartName === selectedChart)) {
-      setSelectedChart(scenarios[0]?.chartName ?? '');
-    }
-  }, [scenarios, selectedChart]);
+    if (!effectiveHero || !effectiveVillain) return [];
+    return getScenarios(scenarioMap, effectiveHero, effectiveVillain, FACING_CATEGORY);
+  }, [scenarioMap, effectiveHero, effectiveVillain]);
+  const effectiveSelectedChart = scenarios.some(s => s.chartName === selectedChart)
+    ? selectedChart
+    : (scenarios[0]?.chartName ?? '');
 
   const view = useMemo(() => {
     if (mode === 'open-range') {
@@ -124,17 +112,17 @@ export function QuizCompareSection({ data, records }: Props) {
       };
     }
 
-    const chart = selectedChart ? stackData[selectedChart] : undefined;
+    const chart = effectiveSelectedChart ? stackData[effectiveSelectedChart] : undefined;
     return {
       left: chart ? buildHandAction(chart) : {},
-      right: selectedChart
-        ? fillUnanswered(latestUserAnswersByHand(records, stack, selectedChart))
+      right: effectiveSelectedChart
+        ? fillUnanswered(latestUserAnswersByHand(records, stack, effectiveSelectedChart))
         : fillUnanswered({}),
       colorMap: COMPARE_ACTION_COLORMAP,
-      title: selectedChart ? `${stack} · ${selectedChart}` : `${stack} · 차트 선택`,
+      title: effectiveSelectedChart ? `${stack} · ${effectiveSelectedChart}` : `${stack} · 차트 선택`,
       missing: !chart,
     };
-  }, [mode, stack, stackData, records, selectedChart, sbOpenChart]);
+  }, [mode, stack, stackData, records, effectiveSelectedChart, sbOpenChart]);
 
   const rightRecords = useMemo(() => {
     if (mode === 'open-range') {
@@ -144,13 +132,13 @@ export function QuizCompareSection({ data, records }: Props) {
         r => r.question.stackSize === stack && rfiCharts.has(r.question.chartName),
       );
     }
-    const targetChart = mode === 'sb-open' ? sbOpenChart : selectedChart;
+    const targetChart = mode === 'sb-open' ? sbOpenChart : effectiveSelectedChart;
     if (!targetChart) return {};
     return latestRecordsByHand(
       records,
       r => r.question.stackSize === stack && r.question.chartName === targetChart,
     );
-  }, [mode, stack, records, selectedChart, sbOpenChart]);
+  }, [mode, stack, records, effectiveSelectedChart, sbOpenChart]);
 
   const summary = useMemo(
     () =>
@@ -226,7 +214,7 @@ export function QuizCompareSection({ data, records }: Props) {
             <div className="flex items-center gap-2">
               <label className="text-sm text-gray-400">나</label>
               <select
-                value={hero}
+                value={effectiveHero}
                 onChange={e => setHero(e.target.value)}
                 className={selectClass}
               >
@@ -239,7 +227,7 @@ export function QuizCompareSection({ data, records }: Props) {
             <div className="flex items-center gap-2">
               <label className="text-sm text-gray-400">빌런</label>
               <select
-                value={villain}
+                value={effectiveVillain}
                 onChange={e => setVillain(e.target.value)}
                 className={selectClass}
               >
@@ -256,7 +244,7 @@ export function QuizCompareSection({ data, records }: Props) {
                   key={s.chartName}
                   onClick={() => setSelectedChart(s.chartName)}
                   className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
-                    selectedChart === s.chartName
+                    effectiveSelectedChart === s.chartName
                       ? 'bg-blue-600 text-white'
                       : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
                   }`}

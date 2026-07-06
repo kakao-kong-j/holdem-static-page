@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { RangeGrid } from '../components/RangeGrid';
 import {
   COINPOKER_COMPARE_COLORS,
@@ -8,17 +8,9 @@ import {
   summarizeCoinPokerComparison,
   type CoinPokerComparisonItem,
 } from '../utils/coinpokerCompare';
-import { parseCoinPokerHands, type CoinPokerGameType } from '../utils/coinpokerParser';
-import {
-  EMPTY_COINPOKER_STORE,
-  clearCoinPokerHands,
-  fetchCoinPokerHands,
-  mergeCoinPokerStore,
-  pushCoinPokerHands,
-  type CoinPokerStore,
-  type LoadProgress,
-} from '../utils/coinpokerSync';
+import type { CoinPokerGameType } from '../utils/coinpokerParser';
 import type { AllData, StackSize } from '../types';
+import { useCoinPokerStore } from './coinpoker/useCoinPokerStore';
 
 const GAME_TYPE_TABS: { value: CoinPokerGameType; label: string }[] = [
   { value: 'cash', label: 'Cash' },
@@ -41,29 +33,29 @@ interface MistakeHandSummary {
 }
 
 export function CoinPokerAnalysisPage({ fallbackStack, data }: Props) {
-  const [store, setStore] = useState<CoinPokerStore>(EMPTY_COINPOKER_STORE);
-  const [gameType, setGameType] = useState<CoinPokerGameType>('cash');
-  const [chartLimit, setChartLimit] = useState(Number.MAX_SAFE_INTEGER); // "all" until adjusted
+  const {
+    store,
+    setStore,
+    gameType,
+    setGameType,
+    chartLimit,
+    setChartLimit,
+    loading,
+    progress,
+    mergeCoinPokerStore,
+    parseCoinPokerHands,
+    clearCoinPokerHands,
+    fetchCoinPokerHands,
+    pushCoinPokerHands,
+  } = useCoinPokerStore();
   const [excludeShortStack, setExcludeShortStack] = useState(false); // tournament: drop effective ≤ 10BB
   const [draftText, setDraftText] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [progress, setProgress] = useState<LoadProgress | null>(null);
   const [busy, setBusy] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [hoveredHand, setHoveredHand] = useState<string | null>(null);
   const [pinnedHand, setPinnedHand] = useState<string | null>(null);
   const [selectedHandHistory, setSelectedHandHistory] = useState<CoinPokerComparisonItem | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  // Load accumulated hands (both game types) on mount, reporting download progress.
-  useEffect(() => {
-    let cancelled = false;
-    fetchCoinPokerHands(p => { if (!cancelled) setProgress(p); })
-      .then(s => { if (!cancelled) setStore(s); })
-      .catch(() => { /* offline / no /api — start empty, uploads stay in-memory */ })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, []);
 
   const parsedHands = gameType === 'cash' ? store.cash : store.tournament;
 
@@ -84,7 +76,7 @@ export function CoinPokerAnalysisPage({ fallbackStack, data }: Props) {
       map.set(h.handId, eff);
     }
     return map;
-  }, [shortStackActive, parsedHands]);
+  }, [shortStackActive, parsedHands, parseCoinPokerHands]);
 
   const filteredHands = useMemo(() => {
     if (!shortStackActive || !effectiveByHandId) return parsedHands;
