@@ -5,10 +5,11 @@ import { QuizPage } from '../pages/QuizPage';
 import { QuizStatsPage } from '../pages/QuizStatsPage';
 import { CoinPokerAnalysisPage } from '../pages/CoinPokerAnalysisPage';
 import { BankrollPage } from '../pages/BankrollPage';
+import { TransactionsPage } from '../pages/TransactionsPage';
 import { EquityCalculatorPage } from '../pages/EquityCalculatorPage';
 import type { AllData, QuizQuestion, StackSize } from '../types';
 
-export type View = 'open-range' | 'sb-open' | 'facing' | 'quiz' | 'quiz-stats' | 'coinpoker' | 'bankroll' | 'equity';
+export type View = 'open-range' | 'sb-open' | 'facing' | 'quiz' | 'quiz-stats' | 'coinpoker' | 'bankroll' | 'transactions' | 'equity';
 
 export type NavigateIntent =
   | { kind: 'chart'; stack: StackSize; chartName: string; viewType: 'open-range' | 'sb-open' | 'facing' }
@@ -32,6 +33,7 @@ export const VIEWS: ViewMeta[] = [
   { value: 'quiz-stats', label: '통계', maxWidth: 'normal', showStackTabs: false },
   { value: 'coinpoker', label: 'CoinPoker 분석', maxWidth: 'wide', showStackTabs: false },
   { value: 'bankroll', label: '뱅크롤', maxWidth: 'wide', showStackTabs: false },
+  { value: 'transactions', label: '거래내역', maxWidth: 'wide', showStackTabs: false },
   { value: 'equity', label: '에쿼티 계산기', maxWidth: 'normal', showStackTabs: false },
 ];
 
@@ -62,6 +64,8 @@ export function renderView(args: {
       return <CoinPokerAnalysisPage fallbackStack={args.stack} data={args.data} />;
     case 'bankroll':
       return <BankrollPage />;
+    case 'transactions':
+      return <TransactionsPage />;
     case 'equity':
       return <EquityCalculatorPage />;
   }
