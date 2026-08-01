@@ -61,7 +61,14 @@ export function TransactionsPage() {
     () => summarizeTransactions(filtered, includeDeposits),
     [filtered, includeDeposits],
   );
-  const balanceTrend = useMemo(() => buildTransactionBalanceTrend(filtered), [filtered]);
+  const chartTransactions = useMemo(
+    () => filterTransactions(transactions, from, to, "all", ""),
+    [transactions, from, to],
+  );
+  const balanceTrend = useMemo(
+    () => buildTransactionBalanceTrend(chartTransactions),
+    [chartTransactions],
+  );
   const listed = useMemo(
     () => [...filtered].sort((a, b) => b.date.localeCompare(a.date)),
     [filtered],
