@@ -76,8 +76,9 @@ function text(value: unknown): string {
 }
 
 function optionalNum(value: unknown): number | undefined {
-  const n = num(value);
-  return value === undefined || value === null || value === '' ? undefined : n;
+  if (value === undefined || value === null || value === '') return undefined;
+  const n = Number.parseFloat(String(value).replace(/,/g, ''));
+  return Number.isFinite(n) ? n : undefined;
 }
 
 function partAmount(part: unknown): number {
@@ -193,7 +194,7 @@ export function summarizeTransactions(
     else if (entry.direction === 'transfer') summary.transfer += entry.amount;
     else summary.unknown += entry.amount;
   }
-  summary.net = summary.income - summary.expense;
+  summary.net = summary.income - summary.expense + summary.transfer;
   return {
     count: summary.count,
     income: roundCents(summary.income),
