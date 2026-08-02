@@ -61,6 +61,11 @@ export interface TransactionSummary {
   net: number;
 }
 
+export interface TransactionBalancePoint {
+  datetime: string;
+  value: number;
+}
+
 function num(value: unknown): number {
   const n = Number.parseFloat(String(value ?? '').replace(/,/g, ''));
   return Number.isFinite(n) ? n : 0;
@@ -169,11 +174,22 @@ export function parseTransactionsFile(parsed: unknown): TransactionEntry[] {
   );
 }
 
-export function summarizeTransactions(entries: TransactionEntry[]): TransactionSummary {
+export function buildTransactionBalanceTrend(entries: TransactionEntry[]): TransactionBalancePoint[] {
+  return entries
+    .filter((entry): entry is TransactionEntry & { balance: number } => entry.balance !== undefined)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((entry) => ({ datetime: entry.date, value: entry.balance }));
+}
+
+export function summarizeTransactions(
+  entries: TransactionEntry[],
+  includeDeposits = false,
+): TransactionSummary {
   const summary: TransactionSummary = { count: entries.length, income: 0, expense: 0, transfer: 0, unknown: 0, net: 0 };
   for (const entry of entries) {
-    if (entry.direction === 'income') summary.income += entry.signedAmount;
-    else if (entry.direction === 'expense') summary.expense += Math.abs(entry.signedAmount);
+    if (entry.direction === 'income') {
+      if (includeDeposits || entry.txnType !== 'deposit') summary.income += entry.signedAmount;
+    } else if (entry.direction === 'expense') summary.expense += Math.abs(entry.signedAmount);
     else if (entry.direction === 'transfer') summary.transfer += entry.amount;
     else summary.unknown += entry.amount;
   }

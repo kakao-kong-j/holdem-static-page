@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
+import { BankrollTrendChart } from '../components/BankrollTrendChart';
 import {
+  buildTransactionBalanceTrend,
   dedupeTransactions,
   filterTransactions,
   formatUsd,
@@ -26,6 +28,7 @@ export function TransactionsPage() {
   const [to, setTo] = useState('');
   const [direction, setDirection] = useState<TransactionDirection | 'all'>('all');
   const [txnType, setTxnType] = useState('');
+  const [includeDeposits, setIncludeDeposits] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -54,7 +57,18 @@ export function TransactionsPage() {
     () => filterTransactions(transactions, from, to, direction, txnType),
     [transactions, from, to, direction, txnType],
   );
-  const summary = useMemo(() => summarizeTransactions(filtered), [filtered]);
+  const summary = useMemo(
+    () => summarizeTransactions(filtered, includeDeposits),
+    [filtered, includeDeposits],
+  );
+  const chartTransactions = useMemo(
+    () => filterTransactions(transactions, from, to, "all", ""),
+    [transactions, from, to],
+  );
+  const balanceTrend = useMemo(
+    () => buildTransactionBalanceTrend(chartTransactions),
+    [chartTransactions],
+  );
   const listed = useMemo(
     () => [...filtered].sort((a, b) => b.date.localeCompare(a.date)),
     [filtered],
@@ -194,12 +208,30 @@ export function TransactionsPage() {
         )}
       </div>
 
+      <label className="flex items-center gap-2 text-sm text-gray-300">
+        <input
+          type="checkbox"
+          checked={includeDeposits}
+          onChange={(event) => setIncludeDeposits(event.target.checked)}
+          className="h-4 w-4 rounded border-gray-700 bg-gray-950 text-indigo-600"
+        />
+        입금 포함
+      </label>
+
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <Card label="Income" value={formatUsd(summary.income)} tone="text-green-400" />
         <Card label="Expense" value={formatUsd(summary.expense)} tone="text-red-400" />
         <Card label="Transfer" value={formatUsd(summary.transfer)} tone="text-indigo-300" />
         <Card label="Net" value={formatUsd(summary.net)} tone={summary.net >= 0 ? 'text-green-400' : 'text-red-400'} />
         <Card label="Rows" value={`${summary.count}`} tone="text-white" />
+      </div>
+
+      <div className="rounded-xl border border-gray-800 bg-gray-900 p-4">
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="font-semibold text-white">Balance trend</h2>
+          <span className="text-xs text-gray-500">{balanceTrend.length} points</span>
+        </div>
+        <BankrollTrendChart points={balanceTrend} />
       </div>
 
       <div className="rounded-xl border border-gray-800 bg-gray-900 p-4">

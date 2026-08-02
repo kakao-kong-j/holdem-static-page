@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildTransactionBalanceTrend,
   classifyTransaction,
   dedupeTransactions,
   parseTransactionsFile,
@@ -60,12 +61,36 @@ describe('summarizeTransactions', () => {
 
     expect(summarizeTransactions(entries)).toEqual({
       count: 3,
-      income: 10,
+      income: 0,
       expense: 2,
       transfer: 3,
       unknown: 0,
-      net: 8,
+      net: -2,
     });
+  });
+
+  it('excludes deposits from income and net by default', () => {
+    const entries = parseTransactionsFile([
+      row({ txn_type: 'deposit', sub_type: 'Deposit Successful', amount: 10 }),
+      row({ txn_id: 'id-2', txn_type: 'reward', sub_type: 'Daily Rakeback', amount: 2 }),
+      row({ txn_id: 'id-3', txn_type: 'tournament', sub_type: 'Tournament Buy In', amount: 3 }),
+    ]);
+
+    expect(summarizeTransactions(entries)).toMatchObject({ income: 2, net: -1 });
+    expect(summarizeTransactions(entries, true)).toMatchObject({ income: 12, net: 9 });
+  });
+
+  it('builds date-sorted balance points and skips missing balances', () => {
+    const entries = parseTransactionsFile([
+      row({ txn_id: 'later', date: '2026-07-06 10:00:00', balance: 25 }),
+      row({ txn_id: 'none', date: '2026-07-05 09:00:00', balance: undefined }),
+      row({ txn_id: 'first', date: '2026-07-05 10:00:00', balance: 20 }),
+    ]);
+
+    expect(buildTransactionBalanceTrend(entries)).toEqual([
+      { datetime: '2026-07-05 10:00:00', value: 20 },
+      { datetime: '2026-07-06 10:00:00', value: 25 },
+    ]);
   });
 });
 
