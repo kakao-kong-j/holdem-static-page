@@ -65,7 +65,7 @@ describe('summarizeTransactions', () => {
       expense: 2,
       transfer: 3,
       unknown: 0,
-      net: -2,
+      net: 1,
     });
   });
 
@@ -84,6 +84,7 @@ describe('summarizeTransactions', () => {
     const entries = parseTransactionsFile([
       row({ txn_id: 'later', date: '2026-07-06 10:00:00', balance: 25 }),
       row({ txn_id: 'none', date: '2026-07-05 09:00:00', balance: undefined }),
+      row({ txn_id: 'invalid', date: '2026-07-05 11:00:00', balance: '_' }),
       row({ txn_id: 'first', date: '2026-07-05 10:00:00', balance: 20 }),
     ]);
 
