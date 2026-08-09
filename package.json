@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "decrypt": "openssl enc -aes-256-cbc -d -salt -pbkdf2 -in public/gto-preflop-charts-all.json.enc -out public/gto-preflop-charts-all.json -pass pass:$DATA_KEY",
-    "encrypt": "openssl enc -aes-256-cbc -e -salt -pbkdf2 -in public/gto-preflop-charts-all.json -out public/gto-preflop-charts-all.json.enc -pass pass:$DATA_KEY",
+    "decrypt": "openssl enc -aes-256-cbc -d -salt -pbkdf2 -in public/gto-preflop-charts-all.json.enc -out public/gto-preflop-charts-all.json -pass pass:$DATA_KEY && openssl enc -aes-256-cbc -d -salt -pbkdf2 -in public/gto-cache-preflop-chart.json.enc -out public/gto-cache-preflop-chart.json -pass pass:$DATA_KEY",
+    "encrypt": "openssl enc -aes-256-cbc -e -salt -pbkdf2 -in public/gto-preflop-charts-all.json -out public/gto-preflop-charts-all.json.enc -pass pass:$DATA_KEY && openssl enc -aes-256-cbc -e -salt -pbkdf2 -in public/gto-cache-preflop-chart.json -out public/gto-cache-preflop-chart.json.enc -pass pass:$DATA_KEY",
     "build:vercel": "npm run decrypt && npm run build",
     "dev:vercel": "vercel dev",
     "lint": "eslint .",

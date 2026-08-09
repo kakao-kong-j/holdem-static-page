@@ -15,6 +15,7 @@ dist-ssr
 
 # Sensitive data
 public/gto-preflop-charts-all.json
+public/gto-cache-preflop-chart.json
 
 # Editor directories and files
 .vscode/*
