@@ -7,9 +7,10 @@ import { CoinPokerAnalysisPage } from '../pages/CoinPokerAnalysisPage';
 import { BankrollPage } from '../pages/BankrollPage';
 import { TransactionsPage } from '../pages/TransactionsPage';
 import { EquityCalculatorPage } from '../pages/EquityCalculatorPage';
+import { CashHandRangePage } from '../pages/CashHandRangePage';
 import type { AllData, QuizQuestion, StackSize } from '../types';
 
-export type View = 'open-range' | 'sb-open' | 'facing' | 'quiz' | 'quiz-stats' | 'coinpoker' | 'bankroll' | 'transactions' | 'equity';
+export type View = 'open-range' | 'sb-open' | 'facing' | 'cash-range' | 'quiz' | 'quiz-stats' | 'coinpoker' | 'bankroll' | 'transactions' | 'equity';
 
 export type NavigateIntent =
   | { kind: 'chart'; stack: StackSize; chartName: string; viewType: 'open-range' | 'sb-open' | 'facing' }
@@ -29,6 +30,7 @@ export const VIEWS: ViewMeta[] = [
   { value: 'open-range', label: 'Open Range', maxWidth: 'normal', showStackTabs: true },
   { value: 'sb-open', label: 'SB Open', maxWidth: 'normal', showStackTabs: true },
   { value: 'facing', label: 'Facing Charts', maxWidth: 'normal', showStackTabs: true },
+  { value: 'cash-range', label: '캐시 핸드레인지', maxWidth: 'normal', showStackTabs: false },
   { value: 'quiz', label: '퀴즈', maxWidth: 'normal', showStackTabs: false },
   { value: 'quiz-stats', label: '통계', maxWidth: 'normal', showStackTabs: false },
   { value: 'coinpoker', label: 'CoinPoker 분석', maxWidth: 'wide', showStackTabs: false },
@@ -56,6 +58,8 @@ export function renderView(args: {
       return <SbOpenPage stackData={stackData} />;
     case 'facing':
       return <FacingPage stackData={stackData} />;
+    case 'cash-range':
+      return <CashHandRangePage />;
     case 'quiz':
       return <QuizPage data={args.data} />;
     case 'quiz-stats':
