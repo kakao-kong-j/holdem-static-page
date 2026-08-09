@@ -36,5 +36,10 @@ describe('CashRangeGrid', () => {
     expect(cell.title).toContain('폴드 29%');
     expect(cell.style.backgroundImage).toContain('71%');
     expect(cell.getAttribute('data-highlighted')).toBe('true');
+    expect(cell.getAttribute('aria-label')).toContain('2.5BB 레이즈 71%');
+
+    const missingCell = container.querySelector('[data-hand="AKs"]') as HTMLElement;
+    expect(missingCell.title).toContain('데이터 없음');
+    expect(missingCell.title).not.toContain('폴드 100%');
   });
 });

@@ -42,7 +42,16 @@ export function CashHandRangePage() {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return response.json();
       })
-      .then(value => setData(parseCashRangeData(value)))
+      .then(value => {
+        const parsed = parseCashRangeData(value);
+        const initialHero = getAvailableCashPositions(parsed)[0];
+        const initialSituation = initialHero && getAvailableCashSituations(parsed, initialHero)[0];
+        if (!initialHero || !initialSituation) throw new Error('사용 가능한 캐시 시나리오가 없습니다.');
+        setData(parsed);
+        setHero(initialHero);
+        setSituation(initialSituation);
+        setOpener(initialSituation === 'opened' ? getAvailableCashOpeners(parsed, initialHero)[0] : undefined);
+      })
       .catch((fetchError: unknown) => {
         if (fetchError instanceof Error && fetchError.name === 'AbortError') return;
         setError(fetchError instanceof Error ? fetchError.message : String(fetchError));
@@ -148,24 +157,28 @@ export function CashHandRangePage() {
             ))}
           </div>
         </>
-      ) : hand && frequencies ? (
+      ) : hand ? (
         <div className="w-full max-w-md rounded-xl border border-gray-800 bg-gray-900/60 p-5">
           <h2 className="mb-4 text-center text-xl font-bold text-white">{hand}</h2>
-          <div className="space-y-2">
-            {actions.map(({ action, frequency }) => {
-              const primary = primaryActions.some(item => item.action === action);
-              return (
-                <div key={action} className="flex items-center justify-between rounded-lg bg-gray-800 px-4 py-3">
-                  <span className="flex items-center gap-2 text-gray-200">
-                    <i className="h-3 w-3 rounded-sm" style={{ backgroundColor: getCashActionColor(action) }} />
-                    {getCashActionLabel(action)}
-                    {primary && <b className="text-xs text-amber-400">주 액션</b>}
-                  </span>
-                  <strong className="text-white">{frequency}%</strong>
-                </div>
-              );
-            })}
-          </div>
+          {frequencies && actions.length > 0 ? (
+            <div className="space-y-2">
+              {actions.map(({ action, frequency }) => {
+                const primary = primaryActions.some(item => item.action === action);
+                return (
+                  <div key={action} className="flex items-center justify-between rounded-lg bg-gray-800 px-4 py-3">
+                    <span className="flex items-center gap-2 text-gray-200">
+                      <i className="h-3 w-3 rounded-sm" style={{ backgroundColor: getCashActionColor(action) }} />
+                      {getCashActionLabel(action)}
+                      {primary && <b className="text-xs text-amber-400">주 액션</b>}
+                    </span>
+                    <strong className="text-white">{frequency}%</strong>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-center text-amber-400">데이터 없음</p>
+          )}
         </div>
       ) : (
         <p className="text-gray-400">핸드를 입력하면 액션별 빈도를 보여드립니다.</p>

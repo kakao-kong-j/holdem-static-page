@@ -139,8 +139,13 @@ export function getCashActionColor(action: string): string {
 }
 
 export function getCashActionGradient(frequencies: CashActionFrequencies): string {
+  const actions = getCashActions(frequencies);
+  if (actions.length === 0) {
+    return 'linear-gradient(to right, #374151 0%, #374151 100%)';
+  }
+
   let start = 0;
-  const stops = getCashActions(frequencies).flatMap(({ action, frequency }) => {
+  const stops = actions.flatMap(({ action, frequency }) => {
     const end = start + frequency;
     const color = getCashActionColor(action);
     const segment = [`${color} ${start}%`, `${color} ${end}%`];

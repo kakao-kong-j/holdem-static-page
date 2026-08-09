@@ -79,5 +79,7 @@ describe('cashRange', () => {
     const gradient = getCashActionGradient({ 'raise_2.5': 71, fold: 29, all_in_100: 0 });
     expect(gradient).toContain('71%');
     expect(gradient).toContain('100%');
+    expect(getCashActionGradient({ raise_2: 0, fold: 0 }))
+      .toBe('linear-gradient(to right, #374151 0%, #374151 100%)');
   });
 });

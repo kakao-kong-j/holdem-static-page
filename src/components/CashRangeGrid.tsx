@@ -22,15 +22,15 @@ function shortAction(action: string): string {
 
 export function CashRangeGrid({ scenario, highlightedHand }: Props) {
   return (
-    <div className="inline-grid gap-[2px]" style={{ gridTemplateColumns: 'repeat(13, 1fr)' }}>
+    <div className="inline-grid gap-[2px]" style={{ gridTemplateColumns: 'repeat(13, 1fr)' }} role="list" aria-label="캐시 핸드레인지 차트">
       {RANKS.map((_, row) => RANKS.map((__, column) => {
         const hand = getHandName(row, column);
-        const frequencies = scenario.hands[hand] ?? { fold: 100 };
+        const frequencies = scenario.hands[hand] ?? {};
         const actions = getCashActions(frequencies);
         const highlighted = highlightedHand === hand;
-        const details = actions
-          .map(({ action, frequency }) => `${getCashActionLabel(action)} ${frequency}%`)
-          .join(', ');
+        const details = actions.length > 0
+          ? actions.map(({ action, frequency }) => `${getCashActionLabel(action)} ${frequency}%`).join(', ')
+          : '데이터 없음';
         const compact = actions
           .map(({ action, frequency }) => `${shortAction(action)}${frequency}`)
           .join('/');
@@ -40,6 +40,8 @@ export function CashRangeGrid({ scenario, highlightedHand }: Props) {
             key={hand}
             data-hand={hand}
             data-highlighted={highlighted ? 'true' : 'false'}
+            role="listitem"
+            aria-label={`${hand} — ${details}`}
             className="flex flex-col items-center justify-center rounded-sm select-none relative"
             style={{
               ...cellSize,

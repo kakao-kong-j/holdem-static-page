@@ -14,7 +14,10 @@ const payload = {
     position: 'UTG',
     actionHistory: [],
     availableActions: ['raise_2.5', 'fold'],
-    hands: { AKs: { 'raise_2.5': 71, fold: 29 } },
+    hands: {
+      AA: { 'raise_2.5': 0, fold: 0 },
+      AKs: { 'raise_2.5': 71, fold: 29 },
+    },
   }],
 };
 
@@ -42,6 +45,8 @@ function renderNode(node: ReactNode) {
 
 async function flushEffects() {
   await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
   });
@@ -89,6 +94,38 @@ describe('CashHandRangePage', () => {
       label: '캐시 핸드레인지',
       showStackTabs: false,
     });
+  });
+
+  it('shows data unavailable for an all-zero hand', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => payload })));
+    const view = renderNode(<CashHandRangePage />);
+    await flushEffects();
+    expect(view.container.textContent).not.toContain('캐시 데이터');
+
+    const handInput = view.container.querySelector('input[placeholder]') as HTMLInputElement;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(handInput, 'AA');
+      handInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    const chartToggle = view.container.querySelector('input[type="checkbox"]') as HTMLInputElement;
+    act(() => chartToggle.click());
+
+    expect(view.container.textContent).toContain('데이터 없음');
+    view.cleanup();
+  });
+
+  it('initializes selection from the first scenario instead of assuming UTG', async () => {
+    const hjPayload = {
+      ...payload,
+      scenarios: [{ ...payload.scenarios[0], id: 'hj_rfi', position: 'HJ' }],
+    };
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => hjPayload })));
+    const view = renderNode(<CashHandRangePage />);
+    await flushEffects();
+
+    expect((view.container.querySelector('select') as HTMLSelectElement).value).toBe('HJ');
+    expect(view.container.textContent).not.toContain('선택한 상황의 차트가 없습니다.');
+    view.cleanup();
   });
 
   it('keeps a cash data load failure inside the page', async () => {
