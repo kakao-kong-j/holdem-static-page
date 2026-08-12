@@ -85,8 +85,8 @@ export function extractTicketPrices(parsed: unknown): Record<string, number> {
 	const prices: Record<string, number> = {};
 	for (const raw of parsed as RawTicketExport[]) {
 		if (!raw || typeof raw !== "object" || !("ticketAmount" in raw)) continue;
-		const ticketAmount = num(raw?.ticketAmount);
-		if (!Number.isFinite(ticketAmount) || ticketAmount < 0) continue;
+		const ticketAmount = strictNonNegativeNumber(raw.ticketAmount);
+		if (ticketAmount === null) continue;
 
 		const ids = [
 			raw.selectedEligibleTournamentId,
@@ -113,6 +113,17 @@ export function extractTicketPrices(parsed: unknown): Record<string, number> {
 		}
 	}
 	return prices;
+}
+
+function strictNonNegativeNumber(value: unknown): number | null {
+	if (typeof value === "number") {
+		return Number.isFinite(value) && value >= 0 ? value : null;
+	}
+	if (typeof value !== "string") return null;
+	const normalized = value.trim().replace(/,/g, "");
+	if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(normalized)) return null;
+	const parsed = Number(normalized);
+	return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
 function ticketNameKey(name: string): string {

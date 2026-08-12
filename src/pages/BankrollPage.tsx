@@ -64,6 +64,7 @@ export function BankrollPage() {
     const files = Array.from(e.target.files ?? []);
     if (files.length === 0) return;
     setFileError(null);
+    setSyncing(true);
     const added: BankrollSession[] = [];
     const errors: string[] = [];
     const parsedFiles: Array<{ name: string; parsed: unknown }> = [];
@@ -77,6 +78,26 @@ export function BankrollPage() {
     }
 
     const importedTicketPrices = mergeTicketPrices(parsedFiles.map(({ parsed }) => extractTicketPrices(parsed)));
+    const editingSession = sessions.find(
+      (session) => session.id === editingId && session.isTicket,
+    );
+    const importedEditingTicketPrice = editingSession
+      ? findTicketPrice(
+          editingSession.id,
+          editingSession.name ?? '',
+          importedTicketPrices,
+        )
+      : null;
+    const ticketUpdates = sessions.flatMap((session) => {
+      if (!session.isTicket) return [];
+      const ticketPrice = findTicketPrice(
+        session.id,
+        session.name ?? '',
+        importedTicketPrices,
+      );
+      if (ticketPrice === null || ticketPrice === session.ticketPrice) return [];
+      return [recalculateSessionProfit({ ...session, ticketPrice })];
+    });
     for (const { name, parsed } of parsedFiles) {
       try {
         if (isTicketExport(parsed)) continue;
@@ -92,14 +113,26 @@ export function BankrollPage() {
     }
     if (inputRef.current) inputRef.current.value = '';
     if (errors.length) setFileError(errors.join(' / '));
-    if (added.length === 0) return;
+    const updates = dedupeSessions([...ticketUpdates, ...added]);
+    const editingUpdate = updates.find(
+      (session) => session.id === editingId && session.isTicket,
+    );
+    const editingTicketPrice = importedEditingTicketPrice ?? editingUpdate?.ticketPrice;
+    if (editingTicketPrice !== undefined && editingTicketPrice !== null) {
+      setDraft((current) => current
+        ? { ...current, ticketPrice: String(editingTicketPrice) }
+        : current);
+    }
+    if (updates.length === 0) {
+      setSyncing(false);
+      return;
+    }
 
     // Optimistic local merge for instant feedback.
-    setSessions((prev) => dedupeSessions([...prev, ...added]));
+    setSessions((prev) => dedupeSessions([...prev, ...updates]));
     // Persist to Vercel Blob; adopt the server-merged union (dedupe by id).
-    setSyncing(true);
     try {
-      const store = await pushBankrollSessions(added);
+      const store = await pushBankrollSessions(updates);
       setSessions(flattenBankrollStore(store));
     } catch {
       /* offline / no /api — keep the optimistic local state */

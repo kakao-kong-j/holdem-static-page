@@ -264,6 +264,17 @@ describe("extractTicketPrices", () => {
 		expect(extractTicketPrices(tourneys)).toEqual({});
 		expect(extractTicketPrices(cash)).toEqual({});
 	});
+
+	it.each([undefined, null, "", "invalid", "11usd"])(
+		"rejects malformed ticketAmount %j instead of treating it as zero or a partial number",
+		(ticketAmount) => {
+			expect(
+				extractTicketPrices([
+					{ ticketAmount, selectedEligibleTournamentId: "ticket-invalid" },
+				]),
+			).toEqual({});
+		},
+	);
 });
 
 describe("findTicketPrice", () => {
