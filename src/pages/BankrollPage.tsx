@@ -42,6 +42,7 @@ export function BankrollPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<SessionDraft | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const ticketCandidatesRef = useRef<TicketCandidate[]>([]);
 
   useEffect(() => {
     fetchUsdKrwRate().then(setRate).catch(() => {});
@@ -78,9 +79,11 @@ export function BankrollPage() {
       }
     }
 
-    const importedTicketCandidates = parsedFiles.flatMap(({ parsed }) =>
-      extractTicketCandidates(parsed),
+    const importedTicketCandidates = mergeTicketCandidates(
+      ticketCandidatesRef.current,
+      parsedFiles.flatMap(({ parsed }) => extractTicketCandidates(parsed)),
     );
+    ticketCandidatesRef.current = importedTicketCandidates;
     const editingSession = sessions.find(
       (session) => session.id === editingId && session.isTicket,
     );
@@ -152,6 +155,7 @@ export function BankrollPage() {
   async function onClearAll() {
     if (!confirm('저장된 모든 뱅크롤 데이터를 삭제할까요?')) return;
     setSessions([]);
+    ticketCandidatesRef.current = [];
     setFrom('');
     setTo('');
     setSyncing(true);
@@ -559,6 +563,17 @@ function collectTicketPrices(
   }
 
   return prices;
+}
+
+function mergeTicketCandidates(
+  existing: TicketCandidate[],
+  imported: TicketCandidate[],
+): TicketCandidate[] {
+  const byTournamentId = new Map<string, TicketCandidate>();
+  for (const candidate of [...existing, ...imported]) {
+    byTournamentId.set(candidate.tourneyId, candidate);
+  }
+  return [...byTournamentId.values()];
 }
 
 function isTicketExport(parsed: unknown): boolean {

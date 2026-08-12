@@ -151,6 +151,87 @@ describe('BankrollPage ticket imports', () => {
     view.cleanup();
   });
 
+  it('keeps a ticket export for a tournament history uploaded in a later selection', async () => {
+    const postedSessions: BankrollSession[][] = [];
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (input === '/api/bankroll' && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body)) as { sessions: BankrollSession[] };
+        postedSessions.push(body.sessions);
+        return {
+          ok: true,
+          json: async () => ({ cash: [], tournament: body.sessions }),
+        };
+      }
+      if (input === '/api/bankroll') {
+        return {
+          ok: true,
+          json: async () => ({ cash: [], tournament: [] }),
+        };
+      }
+      return { ok: false, status: 503 };
+    }));
+
+    const view = renderNode(<BankrollPage />);
+    await flushEffects();
+    const input = view.container.querySelector('input[type="file"]') as HTMLInputElement;
+    const ticketExport = [{
+      ticketAmount: 1.1,
+      eligibleTournaments: [{
+        tourneyId: 63886,
+        tourneyName: 'Step [2] to ₮109 CoinMasters PEPE',
+      }],
+    }];
+    const ticketFile = new File([JSON.stringify(ticketExport)], 'ticket-history.json', {
+      type: 'application/json',
+    });
+    Object.defineProperty(input, 'files', { configurable: true, value: [ticketFile] });
+
+    await act(async () => {
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const tournamentHistory = [{
+      tournament_id: '63887',
+      tournament_name: 'Step [3] to ₮109 CoinMasters SHIBA',
+      minigames_type_id: 1,
+      start_datetime: '2026-06-05 11:45:00',
+      internal_ref: 'ref-63887',
+      buy_in: '0.10',
+      win_loss: '0.00',
+      rank: 4,
+      total_no_of_entries: 1,
+      is_ticket: true,
+    }];
+    const tournamentFile = new File(
+      [JSON.stringify(tournamentHistory)],
+      'tournament-history.json',
+      { type: 'application/json' },
+    );
+    Object.defineProperty(input, 'files', { configurable: true, value: [tournamentFile] });
+
+    await act(async () => {
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(postedSessions).toHaveLength(1);
+    expect(postedSessions[0]).toEqual([
+      expect.objectContaining({
+        id: '63887',
+        ticketPrice: 1.1,
+        profit: 1,
+      }),
+    ]);
+    expect(view.container.textContent).toContain('Ticket +$1.10');
+    expect(view.container.textContent).toContain('$1.00');
+    view.cleanup();
+  });
+
   it('ignores a malformed ticket amount without changing or persisting the existing session', async () => {
     const postedSessions: BankrollSession[][] = [];
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
