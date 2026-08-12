@@ -31,6 +31,12 @@ interface RawTicketExport {
 	eligibleTournaments?: Array<{ tourneyId?: unknown; tourneyName?: unknown }>;
 }
 
+export interface TicketCandidate {
+	tourneyId: string;
+	tourneyName: string;
+	ticketAmount: number;
+}
+
 export interface BankrollSession {
 	id: string;
 	kind: BankrollKind;
@@ -48,6 +54,7 @@ export interface BankrollSession {
 
 export interface BankrollParseOptions {
 	ticketPrices?: Record<string, number>;
+	ticketCandidates?: TicketCandidate[];
 }
 
 /** parseFloat that returns 0 for blank/NaN inputs. */
@@ -115,6 +122,74 @@ export function extractTicketPrices(parsed: unknown): Record<string, number> {
 	return prices;
 }
 
+export function extractTicketCandidates(parsed: unknown): TicketCandidate[] {
+	if (!Array.isArray(parsed) || parsed.length === 0) return [];
+
+	const candidates: TicketCandidate[] = [];
+	for (const raw of parsed as RawTicketExport[]) {
+		if (!raw || typeof raw !== "object" || !Array.isArray(raw.eligibleTournaments))
+			continue;
+		const ticketAmount = strictNonNegativeNumber(raw.ticketAmount);
+		if (ticketAmount === null) continue;
+
+		for (const tournament of raw.eligibleTournaments) {
+			const tourneyId = String(tournament?.tourneyId ?? "").trim();
+			const tourneyName =
+				typeof tournament?.tourneyName === "string"
+					? tournament.tourneyName.trim()
+					: "";
+			if (!tourneyId || !tourneyName) continue;
+			candidates.push({ tourneyId, tourneyName, ticketAmount });
+		}
+	}
+	return candidates;
+}
+
+export function findTicketPrize(
+	id: string,
+	name: string,
+	candidates: TicketCandidate[] = [],
+): number | null {
+	const seatPrize = seatTicketPrize(name);
+	if (seatPrize !== null) return seatPrize;
+
+	const step = parseStepName(name);
+	const sourceId = Number(id);
+	if (!step || !Number.isFinite(sourceId)) return null;
+
+	const previousCandidates = candidates
+		.filter((candidate) => {
+			const candidateId = Number(candidate.tourneyId);
+			return Number.isFinite(candidateId) && candidateId < sourceId;
+		})
+		.sort((a, b) => Number(b.tourneyId) - Number(a.tourneyId));
+	const exact = previousCandidates.find((candidate) => {
+		if (step.level > 2) {
+			return (
+				normalizeTicketName(candidate.tourneyName) ===
+				normalizeTicketName(`Step [${step.level - 1}] to ${step.destination}`)
+			);
+		}
+		return (
+			seatTicketPrize(candidate.tourneyName) !== null &&
+			tournamentDestinationName(candidate.tourneyName) ===
+				normalizeTicketName(step.destination)
+		);
+	});
+	if (exact) return exact.ticketAmount;
+
+	const sourceDestinationAmount = destinationTicketAmount(name);
+	if (sourceDestinationAmount === null) return null;
+	const fallback = previousCandidates.find((candidate) => {
+		if (Number(candidate.tourneyId) !== sourceId - 1) return false;
+		if (destinationTicketAmount(candidate.tourneyName) !== sourceDestinationAmount)
+			return false;
+		if (step.level === 2) return seatTicketPrize(candidate.tourneyName) !== null;
+		return parseStepName(candidate.tourneyName)?.level === step.level - 1;
+	});
+	return fallback?.ticketAmount ?? null;
+}
+
 function strictNonNegativeNumber(value: unknown): number | null {
 	if (typeof value === "number") {
 		return Number.isFinite(value) && value >= 0 ? value : null;
@@ -131,13 +206,42 @@ function ticketNameKey(name: string): string {
 }
 
 function tournamentDestinationKey(name: string): string {
-	const normalized = normalizeTicketName(name);
-	const toIndex = normalized.lastIndexOf(" to ");
-	return `dest:${toIndex === -1 ? normalized : normalized.slice(toIndex + 4)}`;
+	return `dest:${tournamentDestinationName(name)}`;
 }
 
 function normalizeTicketName(name: string): string {
 	return name.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function tournamentDestinationName(name: string): string {
+	const normalized = normalizeTicketName(name);
+	const toIndex = normalized.lastIndexOf(" to ");
+	return toIndex === -1 ? normalized : normalized.slice(toIndex + 4);
+}
+
+function seatTicketPrize(name: string): number | null {
+	const match = normalizeTicketName(name).match(
+		/\bseats? to ₮\s*([\d,]+(?:\.\d+)?)/i,
+	);
+	return match ? strictNonNegativeNumber(match[1]) : null;
+}
+
+function destinationTicketAmount(name: string): number | null {
+	const match = normalizeTicketName(name).match(
+		/\bto ₮\s*([\d,]+(?:\.\d+)?)/i,
+	);
+	return match ? strictNonNegativeNumber(match[1]) : null;
+}
+
+function parseStepName(
+	name: string,
+): { level: number; destination: string } | null {
+	const match = normalizeTicketName(name).match(/^step \[(\d+)] to (.+)$/i);
+	if (!match) return null;
+	const level = Number(match[1]);
+	return Number.isInteger(level) && level >= 2
+		? { level, destination: match[2] }
+		: null;
 }
 
 /** Cash game-type → tag. id first, game_type string fallback. */
@@ -185,8 +289,14 @@ export function normalizeTournamentSessions(
 		.map((r) => {
 			const id = r.tournament_id;
 			const isTicket = isTicketValue(r.is_ticket);
+			const manualTicketPrice = findTicketPrice(
+				id,
+				r.tournament_name,
+				options?.ticketPrices,
+			);
 			const ticketPrice = isTicket
-				? findTicketPrice(id, r.tournament_name, options?.ticketPrices)
+				? (manualTicketPrice ??
+					findTicketPrize(id, r.tournament_name, options?.ticketCandidates))
 				: null;
 			const buyIn = num(r.buy_in);
 			const entries = r.total_no_of_entries > 0 ? r.total_no_of_entries : 1;

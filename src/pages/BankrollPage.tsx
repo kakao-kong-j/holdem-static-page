@@ -11,10 +11,11 @@ import {
   isTicketValue,
   recalculateSessionProfit,
   hasMissingTicketPrice,
-  extractTicketPrices,
-  findTicketPrice,
+  extractTicketCandidates,
+  findTicketPrize,
   type BankrollSession,
   type RawTournament,
+  type TicketCandidate,
 } from '../utils/bankroll';
 import { fetchUsdKrwRate } from '../utils/fxRate';
 import { BankrollTrendChart } from '../components/BankrollTrendChart';
@@ -41,6 +42,7 @@ export function BankrollPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<SessionDraft | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const ticketCandidatesRef = useRef<TicketCandidate[]>([]);
 
   useEffect(() => {
     fetchUsdKrwRate().then(setRate).catch(() => {});
@@ -77,23 +79,27 @@ export function BankrollPage() {
       }
     }
 
-    const importedTicketPrices = mergeTicketPrices(parsedFiles.map(({ parsed }) => extractTicketPrices(parsed)));
+    const importedTicketCandidates = mergeTicketCandidates(
+      ticketCandidatesRef.current,
+      parsedFiles.flatMap(({ parsed }) => extractTicketCandidates(parsed)),
+    );
+    ticketCandidatesRef.current = importedTicketCandidates;
     const editingSession = sessions.find(
       (session) => session.id === editingId && session.isTicket,
     );
     const importedEditingTicketPrice = editingSession
-      ? findTicketPrice(
+      ? findTicketPrize(
           editingSession.id,
           editingSession.name ?? '',
-          importedTicketPrices,
+          importedTicketCandidates,
         )
       : null;
     const ticketUpdates = sessions.flatMap((session) => {
       if (!session.isTicket) return [];
-      const ticketPrice = findTicketPrice(
+      const ticketPrice = findTicketPrize(
         session.id,
         session.name ?? '',
-        importedTicketPrices,
+        importedTicketCandidates,
       );
       if (ticketPrice === null || ticketPrice === session.ticketPrice) return [];
       return [recalculateSessionProfit({ ...session, ticketPrice })];
@@ -101,9 +107,14 @@ export function BankrollPage() {
     for (const { name, parsed } of parsedFiles) {
       try {
         if (isTicketExport(parsed)) continue;
-        const manualTicketPrices = collectTicketPrices(parsed, importedTicketPrices);
-        const ticketPrices = { ...importedTicketPrices, ...manualTicketPrices };
-        const got = parseBankrollFile(parsed, { ticketPrices });
+        const manualTicketPrices = collectTicketPrices(
+          parsed,
+          importedTicketCandidates,
+        );
+        const got = parseBankrollFile(parsed, {
+          ticketCandidates: importedTicketCandidates,
+          ticketPrices: manualTicketPrices,
+        });
         if (got.length === 0) errors.push(`${name}: 인식 가능한 항목 없음`);
         added.push(...got);
       } catch (err) {
@@ -144,6 +155,7 @@ export function BankrollPage() {
   async function onClearAll() {
     if (!confirm('저장된 모든 뱅크롤 데이터를 삭제할까요?')) return;
     setSessions([]);
+    ticketCandidatesRef.current = [];
     setFrom('');
     setTo('');
     setSyncing(true);
@@ -516,7 +528,7 @@ export function BankrollPage() {
 
 function collectTicketPrices(
   parsed: unknown,
-  knownTicketPrices: Record<string, number> = {},
+  ticketCandidates: TicketCandidate[] = [],
 ): Record<string, number> {
   if (!Array.isArray(parsed) || parsed.length === 0) return {};
   const first = parsed[0] as Record<string, unknown>;
@@ -528,7 +540,7 @@ function collectTicketPrices(
       typeof row?.tournament_id === 'string' &&
       row.tournament_id.length > 0 &&
       isTicketValue(row.is_ticket) &&
-      findTicketPrice(row.tournament_id, row.tournament_name, knownTicketPrices) === null &&
+      findTicketPrize(row.tournament_id, row.tournament_name, ticketCandidates) === null &&
       !ticketRows.has(row.tournament_id)
     ) {
       ticketRows.set(row.tournament_id, row);
@@ -553,8 +565,15 @@ function collectTicketPrices(
   return prices;
 }
 
-function mergeTicketPrices(priceMaps: Record<string, number>[]): Record<string, number> {
-  return Object.assign({}, ...priceMaps);
+function mergeTicketCandidates(
+  existing: TicketCandidate[],
+  imported: TicketCandidate[],
+): TicketCandidate[] {
+  const byTournamentId = new Map<string, TicketCandidate>();
+  for (const candidate of [...existing, ...imported]) {
+    byTournamentId.set(candidate.tourneyId, candidate);
+  }
+  return [...byTournamentId.values()];
 }
 
 function isTicketExport(parsed: unknown): boolean {
