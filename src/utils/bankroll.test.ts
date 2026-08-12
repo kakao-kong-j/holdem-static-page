@@ -15,6 +15,8 @@ import {
 	hasMissingTicketPrice,
 	extractTicketPrices,
 	findTicketPrice,
+	extractTicketCandidates,
+	findTicketPrize,
 	type RawCash,
 	type RawTournament,
 } from "./bankroll";
@@ -294,6 +296,205 @@ describe("findTicketPrice", () => {
 				ticketPrices,
 			),
 		).toBeCloseTo(11, 5);
+	});
+});
+
+describe("satellite ticket prize resolution", () => {
+	const coinMillionTickets = [
+		{
+			ticketAmount: 0.3,
+			eligibleTournaments: [
+				{
+					tourneyId: 85493,
+					tourneyName: "Step [3] to ₮215 CoinMillion 2DAY",
+				},
+			],
+		},
+		{
+			ticketAmount: 3.3,
+			eligibleTournaments: [
+				{
+					tourneyId: 85492,
+					tourneyName: "Step [2] to ₮215 CoinMillion 2DAY",
+				},
+			],
+		},
+		{
+			ticketAmount: 3.3,
+			eligibleTournaments: [
+				{
+					tourneyId: 85118,
+					tourneyName: "Step [2] to ₮215 CoinMillion 2DAY",
+				},
+			],
+		},
+		{
+			ticketAmount: 4.4,
+			eligibleTournaments: [
+				{
+					tourneyId: 83720,
+					tourneyName: "Step [2] to ₮215 CoinMillion 2DAY",
+				},
+			],
+		},
+		{
+			ticketAmount: 5.5,
+			eligibleTournaments: [
+				{
+					tourneyId: 85122,
+					tourneyName: "4 Seats to ₮215 CoinMillion 2DAY",
+				},
+			],
+		},
+	];
+
+	it("extracts eligible tournament candidates with their parent ticket amount", () => {
+		expect(extractTicketCandidates(coinMillionTickets)).toContainEqual({
+			tourneyId: "85492",
+			tourneyName: "Step [2] to ₮215 CoinMillion 2DAY",
+			ticketAmount: 3.3,
+		});
+	});
+
+	it("uses the next stage instead of the same-stage entry ticket", () => {
+		const candidates = extractTicketCandidates(coinMillionTickets);
+
+		expect(
+			findTicketPrize(
+				"85494",
+				"Step [4] to ₮215 CoinMillion 2DAY",
+				candidates,
+			),
+		).toBeCloseTo(0.3, 5);
+		expect(
+			findTicketPrize(
+				"85493",
+				"Step [3] to ₮215 CoinMillion 2DAY",
+				candidates,
+			),
+		).toBeCloseTo(3.3, 5);
+		expect(
+			findTicketPrize(
+				"85123",
+				"Step [2] to ₮215 CoinMillion 2DAY",
+				candidates,
+			),
+		).toBeCloseTo(5.5, 5);
+	});
+
+	it("selects the closest lower tournament id among repeated stages", () => {
+		const candidates = extractTicketCandidates(coinMillionTickets);
+
+		expect(
+			findTicketPrize(
+				"85119",
+				"Step [3] to ₮215 CoinMillion 2DAY",
+				candidates,
+			),
+		).toBeCloseTo(3.3, 5);
+		expect(
+			findTicketPrize(
+				"83724",
+				"Step [3] to ₮215 CoinMillion 2DAY",
+				candidates,
+			),
+		).toBeCloseTo(4.4, 5);
+	});
+
+	it.each([
+		["15 Seats to ₮11 Regs Round Table", 11],
+		["20 Seat to ₮8.88 ONE TIME FREEZEOUT", 8.88],
+		["15 Seats to ₮5.50 Micro Kickoff", 5.5],
+	])("extracts a Seats prize from %s", (name, expected) => {
+		expect(findTicketPrize("90000", name, [])).toBeCloseTo(expected, 5);
+	});
+
+	it("does not use future candidates or guess an unresolved Step prize", () => {
+		const candidates = extractTicketCandidates(coinMillionTickets);
+
+		expect(
+			findTicketPrize(
+				"83000",
+				"Step [3] to ₮215 CoinMillion 2DAY",
+				candidates,
+			),
+		).toBeNull();
+		expect(findTicketPrize("90000", "Ticket Event", candidates)).toBeNull();
+	});
+
+	it.each([undefined, null, "", "invalid", "11usd"])(
+		"rejects malformed candidate ticketAmount %j",
+		(ticketAmount) => {
+			expect(
+				extractTicketCandidates([
+					{
+						ticketAmount,
+						eligibleTournaments: [
+							{ tourneyId: 70000, tourneyName: "Step [2] to ₮55 Main Event" },
+						],
+					},
+				]),
+			).toEqual([]);
+		},
+	);
+
+	it("accepts an adjacent same-value destination when the series suffix changed", () => {
+		const candidates = extractTicketCandidates([
+			{
+				ticketAmount: 1.1,
+				eligibleTournaments: [
+					{
+						tourneyId: 63886,
+						tourneyName: "Step [2] to ₮109 CoinMasters PEPE",
+					},
+				],
+			},
+			{
+				ticketAmount: 11,
+				eligibleTournaments: [
+					{
+						tourneyId: 63885,
+						tourneyName: "20 Seats to ₮109 CoinMasters SHIBA",
+					},
+				],
+			},
+		]);
+
+		expect(
+			findTicketPrize(
+				"63887",
+				"Step [3] to ₮109 CoinMasters SHIBA",
+				candidates,
+			),
+		).toBeCloseTo(1.1, 5);
+		expect(
+			findTicketPrize(
+				"63886",
+				"Step [2] to ₮109 CoinMasters PEPE",
+				candidates,
+			),
+		).toBeCloseTo(11, 5);
+	});
+
+	it("does not apply the naming fallback beyond the adjacent same-value stage", () => {
+		const candidates = extractTicketCandidates([
+			{
+				ticketAmount: 1.1,
+				eligibleTournaments: [
+					{ tourneyId: 70001, tourneyName: "Step [2] to ₮109 Beta" },
+				],
+			},
+			{
+				ticketAmount: 0.88,
+				eligibleTournaments: [
+					{ tourneyId: 70002, tourneyName: "Step [2] to ₮88 Beta" },
+				],
+			},
+		]);
+
+		expect(
+			findTicketPrize("70003", "Step [3] to ₮109 Alpha", candidates),
+		).toBeNull();
 	});
 });
 
