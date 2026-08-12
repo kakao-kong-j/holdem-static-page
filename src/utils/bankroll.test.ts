@@ -165,6 +165,76 @@ describe("normalizeTournamentSessions", () => {
 	});
 });
 
+describe("normalizeTournamentSessions with won satellite tickets", () => {
+	const ticketCandidates = extractTicketCandidates([
+		{
+			ticketAmount: 0.3,
+			eligibleTournaments: [
+				{ tourneyId: 85493, tourneyName: "Step [3] to ₮215 CoinMillion 2DAY" },
+			],
+		},
+		{
+			ticketAmount: 3.3,
+			eligibleTournaments: [
+				{ tourneyId: 85492, tourneyName: "Step [2] to ₮215 CoinMillion 2DAY" },
+				{ tourneyId: 85118, tourneyName: "Step [2] to ₮215 CoinMillion 2DAY" },
+			],
+		},
+		{
+			ticketAmount: 5.5,
+			eligibleTournaments: [
+				{ tourneyId: 85122, tourneyName: "4 Seats to ₮215 CoinMillion 2DAY" },
+				{ tourneyId: 85115, tourneyName: "3 Seats to ₮215 CoinMillion 2DAY" },
+			],
+		},
+		{
+			ticketAmount: 1.1,
+			eligibleTournaments: [
+				{ tourneyId: 63886, tourneyName: "Step [2] to ₮109 CoinMasters PEPE" },
+			],
+		},
+		{
+			ticketAmount: 11,
+			eligibleTournaments: [
+				{ tourneyId: 63885, tourneyName: "20 Seats to ₮109 CoinMasters SHIBA" },
+			],
+		},
+	]);
+
+	it.each([
+		["85494", "Step [4] to ₮215 CoinMillion 2DAY", "0.00", 1, 0.3, 0.3],
+		["85119", "Step [3] to ₮215 CoinMillion 2DAY", "0.30", 1, 3.3, 3],
+		["85123", "Step [2] to ₮215 CoinMillion 2DAY", "0.55", 1, 5.5, 4.95],
+		["85116", "Step [2] to ₮215 CoinMillion 2DAY", "1.65", 3, 5.5, 3.85],
+		["83097", "15 Seats to ₮11 Regs Round Table", "2.20", 2, 11, 8.8],
+		["63887", "Step [3] to ₮109 CoinMasters SHIBA", "0.10", 1, 1.1, 1],
+		["63886", "Step [2] to ₮109 CoinMasters PEPE", "1.10", 1, 11, 9.9],
+	])(
+		"calculates the won ticket for %s",
+		(id, name, buyIn, entries, ticketPrice, profit) => {
+			const [session] = normalizeTournamentSessions(
+				[
+					{
+						tournament_id: id,
+						tournament_name: name,
+						minigames_type_id: 1,
+						start_datetime: "2026-08-05 12:00:00",
+						internal_ref: `ref-${id}`,
+						buy_in: buyIn,
+						win_loss: "0.00",
+						total_no_of_entries: entries,
+						is_ticket: true,
+					},
+				],
+				{ ticketCandidates },
+			);
+
+			expect(session.ticketPrice).toBeCloseTo(ticketPrice, 5);
+			expect(session.profit).toBeCloseTo(profit, 5);
+		},
+	);
+});
+
 describe("id validation", () => {
 	it("drops rows missing the dedupe key", () => {
 		const cashBad = normalizeCashSessions([

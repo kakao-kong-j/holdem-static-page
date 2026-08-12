@@ -54,6 +54,7 @@ export interface BankrollSession {
 
 export interface BankrollParseOptions {
 	ticketPrices?: Record<string, number>;
+	ticketCandidates?: TicketCandidate[];
 }
 
 /** parseFloat that returns 0 for blank/NaN inputs. */
@@ -288,8 +289,14 @@ export function normalizeTournamentSessions(
 		.map((r) => {
 			const id = r.tournament_id;
 			const isTicket = isTicketValue(r.is_ticket);
+			const manualTicketPrice = findTicketPrice(
+				id,
+				r.tournament_name,
+				options?.ticketPrices,
+			);
 			const ticketPrice = isTicket
-				? findTicketPrice(id, r.tournament_name, options?.ticketPrices)
+				? (manualTicketPrice ??
+					findTicketPrize(id, r.tournament_name, options?.ticketCandidates))
 				: null;
 			const buyIn = num(r.buy_in);
 			const entries = r.total_no_of_entries > 0 ? r.total_no_of_entries : 1;
