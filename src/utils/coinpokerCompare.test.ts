@@ -408,6 +408,36 @@ describe('compareCoinPokerCashHands', () => {
     ]);
     expect(items.map(item => item.status)).toEqual(['match-open', 'match-open', 'match-open']);
   });
+
+  it('excludes unsupported SB raise and BB isolation raise sizes', () => {
+    const items = compareCoinPokerCashHands([
+      cashHand({
+        handId: 'bb-vs-sb-2.5x-raise',
+        heroPosition: 'BB',
+        heroHand: 'AKs',
+        heroFirstAction: 'calls',
+        preflopActions: [
+          { player: 'SB', position: 'SB', action: 'raises', line: 'SB: raises 150 to 250' },
+          { player: 'Hero', position: 'BB', action: 'calls', line: 'Hero: calls 250' },
+        ],
+      }),
+      cashHand({
+        handId: 'bb-vs-sb-limp-2.5x-iso',
+        heroPosition: 'BB',
+        heroHand: 'AKs',
+        heroFirstAction: 'raises',
+        preflopActions: [
+          { player: 'SB', position: 'SB', action: 'calls', line: 'SB: calls 50' },
+          { player: 'Hero', position: 'BB', action: 'raises', line: 'Hero: raises 150 to 250' },
+        ],
+      }),
+    ], cashData);
+
+    expect(items).toMatchObject([
+      { chartName: null, status: 'excluded', exclusionReason: 'cash-chart-not-found' },
+      { chartName: null, status: 'excluded', exclusionReason: 'cash-chart-not-found' },
+    ]);
+  });
 });
 
 describe('selectCoinPokerStack', () => {
