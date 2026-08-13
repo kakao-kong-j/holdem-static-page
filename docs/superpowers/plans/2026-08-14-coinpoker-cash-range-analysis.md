@@ -68,10 +68,18 @@ Run: `npm test -- src/utils/coinpokerCompare.test.ts`
 **Interfaces:**
 - Cash hands use `compareCoinPokerCashHands` only after cache data validates.
 - Tournament hands keep `compareCoinPokerAutoStack(chartedHands, data, fallbackStack)`.
+- Extend `compareCoinPokerCashHands` to map a single preceding raise to `opened` with the raiser's position, plus cache-supported SB limp, SB raise, and BB raise-after-limp histories before the page selects it.
 
-- [ ] **Step 1: Write failing page/source-selection test**
+- [ ] **Step 1: Write failing cache-history and page/source-selection tests**
 
 ```ts
+expect(compareCoinPokerCashHands([cashHand({
+  heroPosition: 'BTN',
+  preflopActions: [
+    { player: 'CO', position: 'CO', action: 'raises', line: '' },
+    { player: 'Hero', position: 'BTN', action: 'calls', line: '' },
+  ],
+})], cashData)[0].chartName).toBe('btn_vs_co');
 expect(view.container.textContent).toContain('캐시 핸드레인지 기준');
 expect(view.container.textContent).toContain('토너먼트 GTO 기준');
 ```
@@ -80,9 +88,10 @@ expect(view.container.textContent).toContain('토너먼트 GTO 기준');
 
 Run: `npm test -- src/pages/CoinPokerAnalysisPage.test.tsx`
 
-- [ ] **Step 3: Load and validate cache JSON, then select the matching comparator**
+- [ ] **Step 3: Map cache-supported action histories, load and validate cache JSON, then select the matching comparator**
 
 ```ts
+const scenario = findCashScenario(data, hero, 'opened', opener);
 fetch(`${import.meta.env.BASE_URL}gto-cache-preflop-chart.json`)
   .then(response => response.json()).then(parseCashRangeData);
 const comparison = gameType === 'cash' && cashData
