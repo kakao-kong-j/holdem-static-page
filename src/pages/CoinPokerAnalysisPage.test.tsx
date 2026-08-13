@@ -1,4 +1,4 @@
-import { act, type ReactNode } from 'react';
+import { act, StrictMode, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AllData } from '../types';
@@ -97,6 +97,16 @@ async function flushEffects() {
   });
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 afterEach(() => {
   testState.gameType = 'cash';
   testState.store = { cash: [], tournament: [] };
@@ -144,6 +154,35 @@ describe('CoinPokerAnalysisPage analysis sources', () => {
 
     expect(view.container.textContent).toContain('캐시 데이터 로드 실패');
     expect(view.container.textContent).toContain('cash-range-data-unavailable');
+    view.cleanup();
+  });
+
+  it('keeps the cash loading state while a replacement cache request is pending', async () => {
+    testState.store = { cash: [hand({ heroPosition: 'UTG' })], tournament: [] };
+    const requests = [deferred<{ ok: boolean; json: () => Promise<unknown> }>(), deferred<{ ok: boolean; json: () => Promise<unknown> }>()];
+    let requestIndex = 0;
+    const fetchSpy = vi.fn(() => requests[requestIndex++].promise);
+    vi.stubGlobal('fetch', fetchSpy);
+
+    const view = renderNode(
+      <StrictMode>
+        <CoinPokerAnalysisPage fallbackStack="100BB" data={tournamentData} />
+      </StrictMode>,
+    );
+    await flushEffects();
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      const abortError = new Error('aborted');
+      abortError.name = 'AbortError';
+      requests[0].reject(abortError);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(view.container.textContent).toContain('캐시 데이터 로딩 중...');
+    requests[1].resolve({ ok: true, json: async () => cashPayload });
+    await flushEffects();
     view.cleanup();
   });
 });

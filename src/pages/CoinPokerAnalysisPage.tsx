@@ -104,19 +104,27 @@ export function CoinPokerAnalysisPage({ fallbackStack, data }: Props) {
   useEffect(() => {
     if (gameType !== 'cash' || cashData || cashDataError) return;
     const controller = new AbortController();
+    let active = true;
     setCashDataLoading(true);
     fetch(`${import.meta.env.BASE_URL}gto-cache-preflop-chart.json`, { signal: controller.signal })
       .then(response => {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return response.json();
       })
-      .then(value => setCashData(parseCashRangeData(value)))
+      .then(value => {
+        if (active) setCashData(parseCashRangeData(value));
+      })
       .catch((error: unknown) => {
-        if (error instanceof Error && error.name === 'AbortError') return;
+        if (!active || (error instanceof Error && error.name === 'AbortError')) return;
         setCashDataError(error instanceof Error ? error.message : String(error));
       })
-      .finally(() => setCashDataLoading(false));
-    return () => controller.abort();
+      .finally(() => {
+        if (active) setCashDataLoading(false);
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
   }, [gameType, cashData, cashDataError]);
 
   const comparison = useMemo(() => {

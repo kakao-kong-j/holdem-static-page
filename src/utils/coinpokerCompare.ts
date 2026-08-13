@@ -149,7 +149,7 @@ function findCashComparisonSpot(
   if (priorVoluntary.length === 0) {
     return {
       scenario: findCashScenario(data, hand.heroPosition, 'unopened'),
-      kind: 'rfi',
+      kind: hand.heroPosition === 'SB' ? 'sb-open' : 'rfi',
       heroAction: firstHeroAction.action,
     };
   }

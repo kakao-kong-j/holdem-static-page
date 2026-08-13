@@ -54,6 +54,15 @@ const cashData: CashRangeData = {
       },
     },
     {
+      id: 'sb_rfi',
+      position: 'SB',
+      actionHistory: [],
+      availableActions: ['call', 'raise_3.5', 'fold'],
+      hands: {
+        T5s: { call: 100, 'raise_3.5': 0, fold: 0 },
+      },
+    },
+    {
       id: 'btn_vs_co',
       position: 'BTN',
       actionHistory: [['UTG', 'fold'], ['HJ', 'fold'], ['CO', 'raise_2.5']],
@@ -293,6 +302,20 @@ describe('compareCoinPokerCashHands', () => {
     ], cashData)[0]).toMatchObject({
       chartName: 'btn_rfi',
       gtoAction: 'open',
+      status: 'match-open',
+    });
+  });
+
+  it('counts a first-in SB limp as played when the cache calls for it', () => {
+    expect(compareCoinPokerCashHands([cashHand({
+      heroPosition: 'SB',
+      heroHand: 'T5s',
+      heroFirstAction: 'calls',
+      preflopActions: [{ player: 'Hero', position: 'SB', action: 'calls', line: 'Hero: calls 50' }],
+    })], cashData)[0]).toMatchObject({
+      chartName: 'sb_rfi',
+      gtoAction: 'open',
+      heroDecision: 'passive',
       status: 'match-open',
     });
   });
