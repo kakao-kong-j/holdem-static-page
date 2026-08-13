@@ -66,7 +66,7 @@ function hand(overrides: Partial<CoinPokerHand>): CoinPokerHand {
     heroPosition: 'UTG',
     heroCards: ['Ac', 'Ad'],
     heroHand: 'AA',
-    preflopActions: [{ player: 'Hero', position: 'UTG', action: 'raises', line: 'Hero: raises 200 to 300' }],
+    preflopActions: [{ player: 'Hero', position: 'UTG', action: 'raises', line: 'Hero: raises 150 to 250' }],
     heroFirstAction: 'raises',
     rfiEligible: true,
     exclusionReason: null,
@@ -97,6 +97,22 @@ async function flushEffects() {
   });
 }
 
+async function waitFor(assertion: () => void) {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    try {
+      assertion();
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    });
+  }
+  throw lastError;
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason?: unknown) => void;
@@ -117,13 +133,16 @@ afterEach(() => {
 describe('CoinPokerAnalysisPage analysis sources', () => {
   it('uses validated cache ranges for cash rather than tournament chart data', async () => {
     testState.store = { cash: [hand({ heroPosition: 'UTG' })], tournament: [] };
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => cashPayload })));
+    const request = deferred<{ ok: boolean; json: () => Promise<unknown> }>();
+    const fetchSpy = vi.fn(() => request.promise);
+    vi.stubGlobal('fetch', fetchSpy);
 
     const view = renderNode(<CoinPokerAnalysisPage fallbackStack="100BB" data={tournamentData} />);
-    await flushEffects();
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+    request.resolve({ ok: true, json: async () => cashPayload });
+    await waitFor(() => expect(view.container.textContent).toContain('일치: 플레이'));
 
     expect(view.container.textContent).toContain('캐시 핸드레인지 기준');
-    expect(view.container.textContent).toContain('일치: 플레이');
     view.cleanup();
   });
 
