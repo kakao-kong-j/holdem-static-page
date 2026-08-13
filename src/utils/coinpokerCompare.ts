@@ -61,10 +61,10 @@ export function compareCoinPokerCashHands(
   data: CashRangeData,
 ): CoinPokerComparisonItem[] {
   return hands.map((hand) => {
-    const heroDecision = getHeroDecision(hand.heroFirstAction);
-    const scenario = findCashScenario(data, hand.heroPosition as CashPosition, 'unopened');
+    const spot = findCashComparisonSpot(hand, data);
+    const heroDecision = getHeroDecision(spot.heroAction);
 
-    if (!scenario) {
+    if (!spot.scenario) {
       return {
         hand,
         stackSize: '100BB',
@@ -76,18 +76,94 @@ export function compareCoinPokerCashHands(
       };
     }
 
-    const gtoAction = hasPositiveAggressiveAction(scenario.hands[hand.heroHand ?? '']) ? 'open' : 'fold';
+    const gtoAction = hasPositiveAggressiveAction(spot.scenario.hands[hand.heroHand ?? '']) ? 'open' : 'fold';
 
     return {
       hand,
       stackSize: '100BB',
-      chartName: scenario.id,
+      chartName: spot.scenario.id,
       gtoAction,
       heroDecision,
-      status: getStatus(gtoAction, heroDecision, 'rfi'),
+      status: getStatus(gtoAction, heroDecision, spot.kind),
       exclusionReason: null,
     };
   });
+}
+
+function findCashComparisonSpot(
+  hand: CoinPokerHand,
+  data: CashRangeData,
+): { scenario: ReturnType<typeof findCashScenario>; kind: SpotKind; heroAction: string | null } {
+  if (!isCashPosition(hand.heroPosition)) {
+    return { scenario: null, kind: 'rfi', heroAction: hand.heroFirstAction };
+  }
+
+  const heroActionIndices = hand.preflopActions
+    .map((action, index) => action.player === 'Hero' ? index : -1)
+    .filter((index): index is number => index >= 0);
+  const firstHeroIndex = heroActionIndices[0];
+  if (firstHeroIndex === undefined) {
+    return { scenario: null, kind: 'rfi', heroAction: hand.heroFirstAction };
+  }
+
+  const priorVoluntary = hand.preflopActions
+    .slice(0, firstHeroIndex)
+    .filter(action => isVoluntaryAction(action.action));
+  const firstHeroAction = hand.preflopActions[firstHeroIndex];
+
+  if (hand.heroPosition === 'SB' && firstHeroAction.action === 'calls') {
+    const raiseIndex = hand.preflopActions.findIndex((action, index) =>
+      index > firstHeroIndex && action.position === 'BB' && isRaiseAction(action.action));
+    const responseIndex = heroActionIndices.find(index => index > raiseIndex);
+    if (raiseIndex >= 0 && responseIndex !== undefined) {
+      return {
+        scenario: findCashScenario(data, 'SB', 'bb-raise-after-limp'),
+        kind: 'facing-rfi',
+        heroAction: hand.preflopActions[responseIndex].action,
+      };
+    }
+  }
+
+  if (hand.heroPosition === 'BB' && priorVoluntary.length === 1 && priorVoluntary[0].position === 'SB') {
+    const situation = priorVoluntary[0].action === 'calls'
+      ? 'sb-limp'
+      : isRaiseAction(priorVoluntary[0].action) ? 'sb-raise' : null;
+    if (situation) {
+      return {
+        scenario: findCashScenario(data, 'BB', situation),
+        kind: 'facing-rfi',
+        heroAction: firstHeroAction.action,
+      };
+    }
+  }
+
+  if (priorVoluntary.length === 1 && isRaiseAction(priorVoluntary[0].action)
+    && isCashPosition(priorVoluntary[0].position)) {
+    return {
+      scenario: findCashScenario(data, hand.heroPosition, 'opened', priorVoluntary[0].position),
+      kind: 'facing-rfi',
+      heroAction: firstHeroAction.action,
+    };
+  }
+
+  if (priorVoluntary.length === 0) {
+    return {
+      scenario: findCashScenario(data, hand.heroPosition, 'unopened'),
+      kind: 'rfi',
+      heroAction: firstHeroAction.action,
+    };
+  }
+
+  return { scenario: null, kind: 'rfi', heroAction: firstHeroAction.action };
+}
+
+function isCashPosition(position: string | undefined): position is CashPosition {
+  return position === 'UTG' || position === 'HJ' || position === 'CO'
+    || position === 'BTN' || position === 'SB' || position === 'BB';
+}
+
+function isRaiseAction(action: string): boolean {
+  return action === 'raises' || action === 'ALLIN';
 }
 
 export function compareCoinPokerRfi(

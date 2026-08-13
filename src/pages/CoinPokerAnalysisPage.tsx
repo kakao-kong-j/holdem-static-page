@@ -1,13 +1,15 @@
-import { useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { RangeGrid } from '../components/RangeGrid';
 import {
   COINPOKER_COMPARE_COLORS,
   buildCoinPokerGrid,
   compareCoinPokerAutoStack,
+  compareCoinPokerCashHands,
   groupCoinPokerItemsByHand,
   summarizeCoinPokerComparison,
   type CoinPokerComparisonItem,
 } from '../utils/coinpokerCompare';
+import { parseCashRangeData, type CashRangeData } from '../utils/cashRange';
 import type { CoinPokerGameType } from '../utils/coinpokerParser';
 import type { AllData, StackSize } from '../types';
 import { useCoinPokerStore } from './coinpoker/useCoinPokerStore';
@@ -56,6 +58,9 @@ export function CoinPokerAnalysisPage({ fallbackStack, data }: Props) {
   const [hoveredHand, setHoveredHand] = useState<string | null>(null);
   const [pinnedHand, setPinnedHand] = useState<string | null>(null);
   const [selectedHandHistory, setSelectedHandHistory] = useState<CoinPokerComparisonItem | null>(null);
+  const [cashData, setCashData] = useState<CashRangeData | null>(null);
+  const [cashDataLoading, setCashDataLoading] = useState(true);
+  const [cashDataError, setCashDataError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const parsedHands = gameType === 'cash' ? store.cash : store.tournament;
@@ -96,7 +101,29 @@ export function CoinPokerAnalysisPage({ fallbackStack, data }: Props) {
   const effectiveLimit = totalHands === 0 ? 0 : Math.max(1, Math.min(chartLimit, totalHands));
   const chartedHands = useMemo(() => sortedHands.slice(0, effectiveLimit), [sortedHands, effectiveLimit]);
 
-  const comparison = useMemo(() => compareCoinPokerAutoStack(chartedHands, data, fallbackStack), [chartedHands, data, fallbackStack]);
+  useEffect(() => {
+    if (gameType !== 'cash' || cashData || cashDataError) return;
+    const controller = new AbortController();
+    setCashDataLoading(true);
+    fetch(`${import.meta.env.BASE_URL}gto-cache-preflop-chart.json`, { signal: controller.signal })
+      .then(response => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return response.json();
+      })
+      .then(value => setCashData(parseCashRangeData(value)))
+      .catch((error: unknown) => {
+        if (error instanceof Error && error.name === 'AbortError') return;
+        setCashDataError(error instanceof Error ? error.message : String(error));
+      })
+      .finally(() => setCashDataLoading(false));
+    return () => controller.abort();
+  }, [gameType, cashData, cashDataError]);
+
+  const comparison = useMemo(() => {
+    if (gameType === 'tournament') return compareCoinPokerAutoStack(chartedHands, data, fallbackStack);
+    if (cashData) return compareCoinPokerCashHands(chartedHands, cashData);
+    return chartedHands.map(hand => unavailableCashComparison(hand));
+  }, [chartedHands, gameType, data, fallbackStack, cashData]);
   const summary = useMemo(() => summarizeCoinPokerComparison(comparison), [comparison]);
   const comparisonGrid = useMemo(() => buildCoinPokerGrid(comparison), [comparison]);
   const gridMistakeLabels = useMemo(() => buildGridMistakeLabels(comparison), [comparison]);
@@ -335,6 +362,18 @@ export function CoinPokerAnalysisPage({ fallbackStack, data }: Props) {
               </label>
             )}
 
+            <div className="rounded-lg border border-gray-800 bg-gray-950/20 px-3 py-2 text-xs text-gray-400">
+              {gameType === 'cash' ? (
+                <>
+                  <span className="font-medium text-gray-200">캐시 핸드레인지 기준</span>
+                  {cashDataLoading && <span className="ml-2 text-gray-500">캐시 데이터 로딩 중...</span>}
+                  {cashDataError && <span className="ml-2 text-red-300">캐시 데이터 로드 실패: {cashDataError}</span>}
+                </>
+              ) : (
+                <span className="font-medium text-gray-200">토너먼트 GTO 기준</span>
+              )}
+            </div>
+
             <div className="flex flex-col gap-2 rounded-lg border border-gray-800 bg-gray-950/20 p-3 sm:flex-row sm:items-center sm:gap-4">
               <div className="flex items-center gap-2 whitespace-nowrap text-xs text-gray-400">
                 <span>차트에 그릴 핸드 (최신순)</span>
@@ -494,6 +533,20 @@ export function CoinPokerAnalysisPage({ fallbackStack, data }: Props) {
       </div>
     </div>
   );
+}
+
+function unavailableCashComparison(hand: CoinPokerComparisonItem['hand']): CoinPokerComparisonItem {
+  return {
+    hand,
+    stackSize: '100BB',
+    chartName: null,
+    gtoAction: 'unknown',
+    heroDecision: hand.heroFirstAction === 'raises' || hand.heroFirstAction === 'ALLIN'
+      ? 'open'
+      : hand.heroFirstAction === 'folds' ? 'fold' : hand.heroFirstAction ? 'passive' : 'unknown',
+    status: 'excluded',
+    exclusionReason: 'cash-range-data-unavailable',
+  };
 }
 
 function statusLabel(item: CoinPokerComparisonItem): string {
