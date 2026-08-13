@@ -78,12 +78,12 @@ async function appendChunks(sub: string, type: GameType, fresh: StoredHand[]): P
   );
 }
 
-async function mergeType(sub: string, type: GameType, incoming: StoredHand[]): Promise<StoredHand[]> {
+async function mergeType(sub: string, type: GameType, incoming: StoredHand[]): Promise<number> {
   const existing = await readAll(sub, type);
   const seen = new Set(existing.map(h => h.handId));
   const fresh = incoming.filter(h => !seen.has(h.handId));
   if (fresh.length > 0) await appendChunks(sub, type, fresh);
-  return [...existing, ...fresh];
+  return fresh.length;
 }
 
 async function clearType(sub: string, type: GameType): Promise<void> {
@@ -120,12 +120,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     const incomingCash = incoming.filter(h => h.gameType !== 'tournament');
     const incomingTournament = incoming.filter(h => h.gameType === 'tournament');
 
-    const [cash, tournament] = await Promise.all([
-      incomingCash.length ? mergeType(sub, 'cash', incomingCash) : readAll(sub, 'cash'),
-      incomingTournament.length ? mergeType(sub, 'tournament', incomingTournament) : readAll(sub, 'tournament'),
+    const [cashAdded, tournamentAdded] = await Promise.all([
+      incomingCash.length ? mergeType(sub, 'cash', incomingCash) : 0,
+      incomingTournament.length ? mergeType(sub, 'tournament', incomingTournament) : 0,
     ]);
 
-    res.status(200).json({ cash, tournament });
+    res.status(200).json({ added: cashAdded + tournamentAdded });
     return;
   }
 

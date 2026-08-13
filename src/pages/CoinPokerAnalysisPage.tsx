@@ -51,6 +51,7 @@ export function CoinPokerAnalysisPage({ fallbackStack, data }: Props) {
   const [excludeShortStack, setExcludeShortStack] = useState(false); // tournament: drop effective ≤ 10BB
   const [draftText, setDraftText] = useState('');
   const [busy, setBusy] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ completed: number; total: number } | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [hoveredHand, setHoveredHand] = useState<string | null>(null);
   const [pinnedHand, setPinnedHand] = useState<string | null>(null);
@@ -135,14 +136,16 @@ export function CoinPokerAnalysisPage({ fallbackStack, data }: Props) {
     setGameType(tournamentCount > parsed.length - tournamentCount ? 'tournament' : 'cash');
 
     setBusy(true);
+    setUploadProgress({ completed: 0, total: parsed.length });
     try {
-      const merged = await pushCoinPokerHands(parsed);
-      setStore(merged);
+      await pushCoinPokerHands(parsed, setUploadProgress);
     } catch (err) {
       // HTTP error (e.g. expired session) → the optimistic state was NOT saved.
       // Surface it and reconcile with the server so we don't show ghost hands.
-      if (err instanceof Error && err.message.startsWith('push failed:')) {
-        setFileError('서버 저장에 실패했습니다 (세션 만료 등). 다시 시도해 주세요.');
+      if (err instanceof Error && err.message.includes('too large')) {
+        setFileError('핸드 기록 하나가 너무 커서 저장할 수 없습니다. 해당 핸드를 제외한 뒤 다시 시도해 주세요.');
+      } else if (err instanceof Error && err.message.startsWith('push failed:')) {
+        setFileError('일부 핸드가 서버에 저장되지 않았습니다. 다시 시도해 주세요.');
         try {
           setStore(await fetchCoinPokerHands());
         } catch {
@@ -152,6 +155,7 @@ export function CoinPokerAnalysisPage({ fallbackStack, data }: Props) {
       // Network/offline error → keep the optimistic local merge.
     } finally {
       setBusy(false);
+      setUploadProgress(null);
     }
   };
 
@@ -279,6 +283,12 @@ export function CoinPokerAnalysisPage({ fallbackStack, data }: Props) {
           {fileError && (
             <div className="rounded-md border border-red-500/30 bg-red-950/30 px-3 py-2 text-xs text-red-200">
               {fileError}
+            </div>
+          )}
+
+          {busy && uploadProgress && (
+            <div className="rounded-md border border-indigo-500/30 bg-indigo-950/30 px-3 py-2 text-xs text-indigo-200">
+              서버에 저장 중: {uploadProgress.completed}/{uploadProgress.total} 핸드
             </div>
           )}
 
