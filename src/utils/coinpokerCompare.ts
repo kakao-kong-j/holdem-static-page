@@ -1,5 +1,6 @@
 import { STACK_SIZES } from '../constants';
 import type { AllData, ColorDef, StackData, StackSize } from '../types';
+import { findCashScenario, type CashActionFrequencies, type CashPosition, type CashRangeData } from './cashRange';
 import type { CoinPokerHand } from './coinpokerParser';
 import { buildHandAction, forEachHand } from './hand';
 import { buildScenarioMap, getScenarios } from './scenarioMap';
@@ -52,6 +53,40 @@ export function compareCoinPokerAutoStack(
   return hands.flatMap((hand) => {
     const stackSize = selectCoinPokerStack(hand.heroStackBb, fallbackStack);
     return compareCoinPokerRfi([hand], allData[stackSize], stackSize);
+  });
+}
+
+export function compareCoinPokerCashHands(
+  hands: CoinPokerHand[],
+  data: CashRangeData,
+): CoinPokerComparisonItem[] {
+  return hands.map((hand) => {
+    const heroDecision = getHeroDecision(hand.heroFirstAction);
+    const scenario = findCashScenario(data, hand.heroPosition as CashPosition, 'unopened');
+
+    if (!scenario) {
+      return {
+        hand,
+        stackSize: '100BB',
+        chartName: null,
+        gtoAction: 'unknown',
+        heroDecision,
+        status: 'excluded',
+        exclusionReason: 'cash-chart-not-found',
+      };
+    }
+
+    const gtoAction = hasPositiveAggressiveAction(scenario.hands[hand.heroHand ?? '']) ? 'open' : 'fold';
+
+    return {
+      hand,
+      stackSize: '100BB',
+      chartName: scenario.id,
+      gtoAction,
+      heroDecision,
+      status: getStatus(gtoAction, heroDecision, 'rfi'),
+      exclusionReason: null,
+    };
   });
 }
 
@@ -305,6 +340,10 @@ function getHeroDecision(action: string | null): CoinPokerComparisonItem['heroDe
   if (action === 'folds') return 'fold';
   if (action === null) return 'unknown';
   return 'passive';
+}
+
+function hasPositiveAggressiveAction(frequencies: CashActionFrequencies | undefined): boolean {
+  return Object.entries(frequencies ?? {}).some(([action, frequency]) => action !== 'fold' && frequency > 0);
 }
 
 function getStatus(

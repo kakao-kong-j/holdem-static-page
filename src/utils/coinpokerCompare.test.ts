@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { AllData, StackData } from '../types';
+import type { CashRangeData } from './cashRange';
 import type { CoinPokerHand } from './coinpokerParser';
 import {
   buildCoinPokerGrid,
   compareCoinPokerAutoStack,
+  compareCoinPokerCashHands,
   compareCoinPokerRfi,
   groupCoinPokerItemsByHand,
   selectCoinPokerStack,
@@ -29,6 +31,31 @@ const allData: AllData = {
   '100BB': { 'BTN RFI': { raise: ['JJ'] } },
 };
 
+const cashData: CashRangeData = {
+  game: { name: '6-max NL10 cash', stackBb: 100, openSizeBb: 2.5 },
+  scenarios: [
+    {
+      id: 'utg_rfi',
+      position: 'UTG',
+      actionHistory: [],
+      availableActions: ['raise_2.5', 'fold'],
+      hands: {
+        AA: { 'raise_2.5': 100, fold: 0 },
+        '72o': { 'raise_2.5': 0, fold: 100 },
+      },
+    },
+    {
+      id: 'btn_rfi',
+      position: 'BTN',
+      actionHistory: [],
+      availableActions: ['raise_2.5', 'fold'],
+      hands: {
+        AKs: { call: 35, fold: 65 },
+      },
+    },
+  ],
+};
+
 function hand(overrides: Partial<CoinPokerHand>): CoinPokerHand {
   return {
     handId: '1',
@@ -52,6 +79,10 @@ function hand(overrides: Partial<CoinPokerHand>): CoinPokerHand {
     exclusionReason: null,
     ...overrides,
   };
+}
+
+function cashHand(overrides: Partial<CoinPokerHand>): CoinPokerHand {
+  return hand({ gameType: 'cash', heroPosition: 'UTG', ...overrides });
 }
 
 function item(heroHand: string | null, status: CoinPokerCompareStatus): CoinPokerComparisonItem {
@@ -197,6 +228,36 @@ describe('compareCoinPokerRfi', () => {
       gtoAction: 'open',
       heroDecision: 'passive',
       exclusionReason: null,
+    });
+  });
+});
+
+describe('compareCoinPokerCashHands', () => {
+  it('uses the cash range scenario to classify first-in opens', () => {
+    expect(compareCoinPokerCashHands([cashHand({ heroHand: 'AA' })], cashData)[0]).toMatchObject({
+      chartName: 'utg_rfi',
+      gtoAction: 'open',
+      status: 'match-open',
+    });
+    expect(compareCoinPokerCashHands([cashHand({ heroHand: '72o' })], cashData)[0]).toMatchObject({
+      chartName: 'utg_rfi',
+      gtoAction: 'fold',
+      status: 'extra-open',
+    });
+  });
+
+  it('excludes hands whose cash chart scenario is absent', () => {
+    expect(compareCoinPokerCashHands([cashHand({ heroPosition: 'LJ' })], cashData)[0].exclusionReason)
+      .toBe('cash-chart-not-found');
+  });
+
+  it('treats every positive non-fold frequency as an expected open', () => {
+    expect(compareCoinPokerCashHands([
+      cashHand({ heroPosition: 'BTN', heroHand: 'AKs' }),
+    ], cashData)[0]).toMatchObject({
+      chartName: 'btn_rfi',
+      gtoAction: 'open',
+      status: 'match-open',
     });
   });
 });
