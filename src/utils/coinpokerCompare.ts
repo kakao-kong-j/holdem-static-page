@@ -1,7 +1,7 @@
 import { STACK_SIZES } from '../constants';
 import type { AllData, ColorDef, StackData, StackSize } from '../types';
 import { findCashScenario, type CashActionFrequencies, type CashPosition, type CashRangeData } from './cashRange';
-import type { CoinPokerHand } from './coinpokerParser';
+import type { CoinPokerAction, CoinPokerHand } from './coinpokerParser';
 import { buildHandAction, forEachHand } from './hand';
 import { buildScenarioMap, getScenarios } from './scenarioMap';
 
@@ -62,9 +62,9 @@ export function compareCoinPokerCashHands(
 ): CoinPokerComparisonItem[] {
   return hands.map((hand) => {
     const spot = findCashComparisonSpot(hand, data);
-    const heroDecision = getHeroDecision(spot.heroAction);
+    const heroDecision = getHeroDecision(spot.heroAction?.action ?? null);
 
-    if (!spot.scenario) {
+    if (!spot.scenario || !matchesCashHeroAction(spot.scenario, spot.heroAction, hand.bigBlind)) {
       return {
         hand,
         stackSize: '100BB',
@@ -93,9 +93,9 @@ export function compareCoinPokerCashHands(
 function findCashComparisonSpot(
   hand: CoinPokerHand,
   data: CashRangeData,
-): { scenario: ReturnType<typeof findCashScenario>; kind: SpotKind; heroAction: string | null } {
+): { scenario: ReturnType<typeof findCashScenario>; kind: SpotKind; heroAction: CoinPokerAction | null } {
   if (!isCashPosition(hand.heroPosition)) {
-    return { scenario: null, kind: 'rfi', heroAction: hand.heroFirstAction };
+    return { scenario: null, kind: 'rfi', heroAction: null };
   }
 
   const heroActionIndices = hand.preflopActions
@@ -103,7 +103,7 @@ function findCashComparisonSpot(
     .filter((index): index is number => index >= 0);
   const firstHeroIndex = heroActionIndices[0];
   if (firstHeroIndex === undefined) {
-    return { scenario: null, kind: 'rfi', heroAction: hand.heroFirstAction };
+    return { scenario: null, kind: 'rfi', heroAction: null };
   }
 
   const priorVoluntary = hand.preflopActions
@@ -117,9 +117,13 @@ function findCashComparisonSpot(
     const responseIndex = heroActionIndices.find(index => index > raiseIndex);
     if (raiseIndex >= 0 && responseIndex !== undefined) {
       return {
-        scenario: findCashScenario(data, 'SB', 'bb-raise-after-limp'),
+        scenario: findMatchingCashRaiseScenario(
+          findCashScenario(data, 'SB', 'bb-raise-after-limp'),
+          hand.preflopActions[raiseIndex],
+          hand.bigBlind,
+        ),
         kind: 'facing-rfi',
-        heroAction: hand.preflopActions[responseIndex].action,
+        heroAction: hand.preflopActions[responseIndex],
       };
     }
   }
@@ -129,10 +133,13 @@ function findCashComparisonSpot(
       ? 'sb-limp'
       : isRaiseAction(priorVoluntary[0].action) ? 'sb-raise' : null;
     if (situation) {
+      const scenario = findCashScenario(data, 'BB', situation);
       return {
-        scenario: findCashScenario(data, 'BB', situation),
+        scenario: situation === 'sb-raise'
+          ? findMatchingCashRaiseScenario(scenario, priorVoluntary[0], hand.bigBlind)
+          : scenario,
         kind: 'facing-rfi',
-        heroAction: firstHeroAction.action,
+        heroAction: firstHeroAction,
       };
     }
   }
@@ -140,9 +147,13 @@ function findCashComparisonSpot(
   if (priorVoluntary.length === 1 && isRaiseAction(priorVoluntary[0].action)
     && isCashPosition(priorVoluntary[0].position)) {
     return {
-      scenario: findCashScenario(data, hand.heroPosition, 'opened', priorVoluntary[0].position),
+      scenario: findMatchingCashRaiseScenario(
+        findCashScenario(data, hand.heroPosition, 'opened', priorVoluntary[0].position),
+        priorVoluntary[0],
+        hand.bigBlind,
+      ),
       kind: 'facing-rfi',
-      heroAction: firstHeroAction.action,
+      heroAction: firstHeroAction,
     };
   }
 
@@ -150,11 +161,42 @@ function findCashComparisonSpot(
     return {
       scenario: findCashScenario(data, hand.heroPosition, 'unopened'),
       kind: hand.heroPosition === 'SB' ? 'sb-open' : 'rfi',
-      heroAction: firstHeroAction.action,
+      heroAction: firstHeroAction,
     };
   }
 
-  return { scenario: null, kind: 'rfi', heroAction: firstHeroAction.action };
+  return { scenario: null, kind: 'rfi', heroAction: firstHeroAction };
+}
+
+function findMatchingCashRaiseScenario(
+  scenario: ReturnType<typeof findCashScenario>,
+  action: CoinPokerAction,
+  bigBlind: number,
+): ReturnType<typeof findCashScenario> {
+  if (!scenario || !action.position) return null;
+  const expectedAction = scenario.actionHistory.find(([position, cacheAction]) =>
+    position === action.position && cacheAction.startsWith('raise_'))?.[1];
+  return expectedAction && matchesCashRaiseSize(action, expectedAction, bigBlind) ? scenario : null;
+}
+
+function matchesCashHeroAction(
+  scenario: NonNullable<ReturnType<typeof findCashScenario>>,
+  action: CoinPokerAction | null,
+  bigBlind: number,
+): boolean {
+  if (!action || action.action !== 'raises') return action?.action !== 'ALLIN';
+  return scenario.availableActions.some(cacheAction => matchesCashRaiseSize(action, cacheAction, bigBlind));
+}
+
+function matchesCashRaiseSize(action: CoinPokerAction, cacheAction: string, bigBlind: number): boolean {
+  if (action.action !== 'raises' || !cacheAction.startsWith('raise_') || !Number.isFinite(bigBlind) || bigBlind <= 0) {
+    return false;
+  }
+  const expectedBb = Number(cacheAction.slice('raise_'.length));
+  const amount = action.line.match(/\braises\b.*?\bto\s+([^\s]+)/i)?.[1];
+  const raiseTo = amount ? Number(amount.replace(/[^\d.-]/g, '')) : Number.NaN;
+  return Number.isFinite(expectedBb) && Number.isFinite(raiseTo)
+    && Math.abs(raiseTo / bigBlind - expectedBb) < 0.001;
 }
 
 function isCashPosition(position: string | undefined): position is CashPosition {

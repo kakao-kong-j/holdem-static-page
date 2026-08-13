@@ -118,7 +118,7 @@ function hand(overrides: Partial<CoinPokerHand>): CoinPokerHand {
     heroPosition: 'BTN',
     heroCards: ['Ac', 'Ad'],
     heroHand: 'AA',
-    preflopActions: [{ player: 'Hero', action: 'raises', line: 'Hero: raises 200 to 300' }],
+    preflopActions: [{ player: 'Hero', action: 'raises', line: 'Hero: raises 150 to 250' }],
     heroFirstAction: 'raises',
     rfiEligible: true,
     exclusionReason: null,
@@ -326,14 +326,44 @@ describe('compareCoinPokerCashHands', () => {
       heroHand: 'AKs',
       heroFirstAction: 'calls',
       preflopActions: [
-        { player: 'CO', position: 'CO', action: 'raises', line: 'CO: raises 250 to 350' },
-        { player: 'Hero', position: 'BTN', action: 'calls', line: 'Hero: calls 350' },
+        { player: 'CO', position: 'CO', action: 'raises', line: 'CO: raises 150 to 250' },
+        { player: 'Hero', position: 'BTN', action: 'calls', line: 'Hero: calls 250' },
       ],
     })], cashData)[0]).toMatchObject({
       chartName: 'btn_vs_co',
       gtoAction: 'open',
       status: 'match-open',
     });
+  });
+
+  it('excludes opens and all-ins whose raise sizes are absent from the cache', () => {
+    const items = compareCoinPokerCashHands([
+      cashHand({
+        handId: 'btn-vs-co-3.5x',
+        heroPosition: 'BTN',
+        heroHand: 'AKs',
+        heroFirstAction: 'calls',
+        preflopActions: [
+          { player: 'CO', position: 'CO', action: 'raises', line: 'CO: raises 250 to 350' },
+          { player: 'Hero', position: 'BTN', action: 'calls', line: 'Hero: calls 350' },
+        ],
+      }),
+      cashHand({
+        handId: 'btn-vs-co-all-in',
+        heroPosition: 'BTN',
+        heroHand: 'AKs',
+        heroFirstAction: 'calls',
+        preflopActions: [
+          { player: 'CO', position: 'CO', action: 'ALLIN', line: 'CO: ALLIN 10000' },
+          { player: 'Hero', position: 'BTN', action: 'calls', line: 'Hero: calls 10000' },
+        ],
+      }),
+    ], cashData);
+
+    expect(items).toMatchObject([
+      { chartName: null, status: 'excluded', exclusionReason: 'cash-chart-not-found' },
+      { chartName: null, status: 'excluded', exclusionReason: 'cash-chart-not-found' },
+    ]);
   });
 
   it('maps the cache-supported SB and BB action histories', () => {
@@ -345,7 +375,7 @@ describe('compareCoinPokerCashHands', () => {
         heroFirstAction: 'raises',
         preflopActions: [
           { player: 'SB', position: 'SB', action: 'calls', line: 'SB: calls 50' },
-          { player: 'Hero', position: 'BB', action: 'raises', line: 'Hero: raises 150 to 250' },
+          { player: 'Hero', position: 'BB', action: 'raises', line: 'Hero: raises 250 to 350' },
         ],
       }),
       cashHand({
@@ -365,8 +395,8 @@ describe('compareCoinPokerCashHands', () => {
         heroFirstAction: 'calls',
         preflopActions: [
           { player: 'Hero', position: 'SB', action: 'calls', line: 'Hero: calls 50' },
-          { player: 'BB', position: 'BB', action: 'raises', line: 'BB: raises 150 to 250' },
-          { player: 'Hero', position: 'SB', action: 'calls', line: 'Hero: calls 200' },
+          { player: 'BB', position: 'BB', action: 'raises', line: 'BB: raises 250 to 350' },
+          { player: 'Hero', position: 'SB', action: 'calls', line: 'Hero: calls 300' },
         ],
       }),
     ], cashData);
