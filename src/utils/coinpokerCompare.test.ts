@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { AllData, StackData } from '../types';
+import type { CashRangeData } from './cashRange';
 import type { CoinPokerHand } from './coinpokerParser';
 import {
   buildCoinPokerGrid,
   compareCoinPokerAutoStack,
+  compareCoinPokerCashHands,
   compareCoinPokerRfi,
   groupCoinPokerItemsByHand,
   selectCoinPokerStack,
@@ -29,6 +31,76 @@ const allData: AllData = {
   '100BB': { 'BTN RFI': { raise: ['JJ'] } },
 };
 
+const cashData: CashRangeData = {
+  game: { name: '6-max NL10 cash', stackBb: 100, openSizeBb: 2.5 },
+  scenarios: [
+    {
+      id: 'utg_rfi',
+      position: 'UTG',
+      actionHistory: [],
+      availableActions: ['raise_2.5', 'fold'],
+      hands: {
+        AA: { 'raise_2.5': 100, fold: 0 },
+        '72o': { 'raise_2.5': 0, fold: 100 },
+      },
+    },
+    {
+      id: 'btn_rfi',
+      position: 'BTN',
+      actionHistory: [],
+      availableActions: ['raise_2.5', 'fold'],
+      hands: {
+        AKs: { call: 35, fold: 65 },
+      },
+    },
+    {
+      id: 'sb_rfi',
+      position: 'SB',
+      actionHistory: [],
+      availableActions: ['call', 'raise_3.5', 'fold'],
+      hands: {
+        T5s: { call: 100, 'raise_3.5': 0, fold: 0 },
+      },
+    },
+    {
+      id: 'btn_vs_co',
+      position: 'BTN',
+      actionHistory: [['UTG', 'fold'], ['HJ', 'fold'], ['CO', 'raise_2.5']],
+      availableActions: ['raise_8', 'call', 'fold'],
+      hands: {
+        AKs: { raise_8: 50, call: 50, fold: 0 },
+      },
+    },
+    {
+      id: 'bb_vs_sb_limp',
+      position: 'BB',
+      actionHistory: [['UTG', 'fold'], ['HJ', 'fold'], ['CO', 'fold'], ['BTN', 'fold'], ['SB', 'call']],
+      availableActions: ['raise_3.5', 'check'],
+      hands: {
+        AKs: { 'raise_3.5': 75, check: 25 },
+      },
+    },
+    {
+      id: 'bb_vs_sb_raise',
+      position: 'BB',
+      actionHistory: [['UTG', 'fold'], ['HJ', 'fold'], ['CO', 'fold'], ['BTN', 'fold'], ['SB', 'raise_3.5']],
+      availableActions: ['raise_10.5', 'call', 'fold'],
+      hands: {
+        AKs: { 'raise_10.5': 25, call: 75, fold: 0 },
+      },
+    },
+    {
+      id: 'sb_vs_bb_raise_after_limp',
+      position: 'SB',
+      actionHistory: [['UTG', 'fold'], ['HJ', 'fold'], ['CO', 'fold'], ['BTN', 'fold'], ['SB', 'call'], ['BB', 'raise_3.5']],
+      availableActions: ['raise_14', 'call', 'fold'],
+      hands: {
+        AKs: { 'raise_14': 50, call: 50, fold: 0 },
+      },
+    },
+  ],
+};
+
 function hand(overrides: Partial<CoinPokerHand>): CoinPokerHand {
   return {
     handId: '1',
@@ -46,12 +118,16 @@ function hand(overrides: Partial<CoinPokerHand>): CoinPokerHand {
     heroPosition: 'BTN',
     heroCards: ['Ac', 'Ad'],
     heroHand: 'AA',
-    preflopActions: [{ player: 'Hero', action: 'raises', line: 'Hero: raises 200 to 300' }],
+    preflopActions: [{ player: 'Hero', action: 'raises', line: 'Hero: raises 150 to 250' }],
     heroFirstAction: 'raises',
     rfiEligible: true,
     exclusionReason: null,
     ...overrides,
   };
+}
+
+function cashHand(overrides: Partial<CoinPokerHand>): CoinPokerHand {
+  return hand({ gameType: 'cash', heroPosition: 'UTG', ...overrides });
 }
 
 function item(heroHand: string | null, status: CoinPokerCompareStatus): CoinPokerComparisonItem {
@@ -198,6 +274,169 @@ describe('compareCoinPokerRfi', () => {
       heroDecision: 'passive',
       exclusionReason: null,
     });
+  });
+});
+
+describe('compareCoinPokerCashHands', () => {
+  it('uses the cash range scenario to classify first-in opens', () => {
+    expect(compareCoinPokerCashHands([cashHand({ heroHand: 'AA' })], cashData)[0]).toMatchObject({
+      chartName: 'utg_rfi',
+      gtoAction: 'open',
+      status: 'match-open',
+    });
+    expect(compareCoinPokerCashHands([cashHand({ heroHand: '72o' })], cashData)[0]).toMatchObject({
+      chartName: 'utg_rfi',
+      gtoAction: 'fold',
+      status: 'extra-open',
+    });
+  });
+
+  it('excludes hands whose cash chart scenario is absent', () => {
+    expect(compareCoinPokerCashHands([cashHand({ heroPosition: 'LJ' })], cashData)[0].exclusionReason)
+      .toBe('cash-chart-not-found');
+  });
+
+  it('treats every positive non-fold frequency as an expected open', () => {
+    expect(compareCoinPokerCashHands([
+      cashHand({ heroPosition: 'BTN', heroHand: 'AKs' }),
+    ], cashData)[0]).toMatchObject({
+      chartName: 'btn_rfi',
+      gtoAction: 'open',
+      status: 'match-open',
+    });
+  });
+
+  it('counts a first-in SB limp as played when the cache calls for it', () => {
+    expect(compareCoinPokerCashHands([cashHand({
+      heroPosition: 'SB',
+      heroHand: 'T5s',
+      heroFirstAction: 'calls',
+      preflopActions: [{ player: 'Hero', position: 'SB', action: 'calls', line: 'Hero: calls 50' }],
+    })], cashData)[0]).toMatchObject({
+      chartName: 'sb_rfi',
+      gtoAction: 'open',
+      heroDecision: 'passive',
+      status: 'match-open',
+    });
+  });
+
+  it('maps a preceding raise to the cache scenario for that opener', () => {
+    expect(compareCoinPokerCashHands([cashHand({
+      heroPosition: 'BTN',
+      heroHand: 'AKs',
+      heroFirstAction: 'calls',
+      preflopActions: [
+        { player: 'CO', position: 'CO', action: 'raises', line: 'CO: raises 150 to 250' },
+        { player: 'Hero', position: 'BTN', action: 'calls', line: 'Hero: calls 250' },
+      ],
+    })], cashData)[0]).toMatchObject({
+      chartName: 'btn_vs_co',
+      gtoAction: 'open',
+      status: 'match-open',
+    });
+  });
+
+  it('excludes opens and all-ins whose raise sizes are absent from the cache', () => {
+    const items = compareCoinPokerCashHands([
+      cashHand({
+        handId: 'btn-vs-co-3.5x',
+        heroPosition: 'BTN',
+        heroHand: 'AKs',
+        heroFirstAction: 'calls',
+        preflopActions: [
+          { player: 'CO', position: 'CO', action: 'raises', line: 'CO: raises 250 to 350' },
+          { player: 'Hero', position: 'BTN', action: 'calls', line: 'Hero: calls 350' },
+        ],
+      }),
+      cashHand({
+        handId: 'btn-vs-co-all-in',
+        heroPosition: 'BTN',
+        heroHand: 'AKs',
+        heroFirstAction: 'calls',
+        preflopActions: [
+          { player: 'CO', position: 'CO', action: 'ALLIN', line: 'CO: ALLIN 10000' },
+          { player: 'Hero', position: 'BTN', action: 'calls', line: 'Hero: calls 10000' },
+        ],
+      }),
+    ], cashData);
+
+    expect(items).toMatchObject([
+      { chartName: null, status: 'excluded', exclusionReason: 'cash-chart-not-found' },
+      { chartName: null, status: 'excluded', exclusionReason: 'cash-chart-not-found' },
+    ]);
+  });
+
+  it('maps the cache-supported SB and BB action histories', () => {
+    const items = compareCoinPokerCashHands([
+      cashHand({
+        handId: 'bb-vs-sb-limp',
+        heroPosition: 'BB',
+        heroHand: 'AKs',
+        heroFirstAction: 'raises',
+        preflopActions: [
+          { player: 'SB', position: 'SB', action: 'calls', line: 'SB: calls 50' },
+          { player: 'Hero', position: 'BB', action: 'raises', line: 'Hero: raises 250 to 350' },
+        ],
+      }),
+      cashHand({
+        handId: 'bb-vs-sb-raise',
+        heroPosition: 'BB',
+        heroHand: 'AKs',
+        heroFirstAction: 'calls',
+        preflopActions: [
+          { player: 'SB', position: 'SB', action: 'raises', line: 'SB: raises 250 to 350' },
+          { player: 'Hero', position: 'BB', action: 'calls', line: 'Hero: calls 350' },
+        ],
+      }),
+      cashHand({
+        handId: 'sb-vs-bb-raise-after-limp',
+        heroPosition: 'SB',
+        heroHand: 'AKs',
+        heroFirstAction: 'calls',
+        preflopActions: [
+          { player: 'Hero', position: 'SB', action: 'calls', line: 'Hero: calls 50' },
+          { player: 'BB', position: 'BB', action: 'raises', line: 'BB: raises 250 to 350' },
+          { player: 'Hero', position: 'SB', action: 'calls', line: 'Hero: calls 300' },
+        ],
+      }),
+    ], cashData);
+
+    expect(items.map(item => item.chartName)).toEqual([
+      'bb_vs_sb_limp',
+      'bb_vs_sb_raise',
+      'sb_vs_bb_raise_after_limp',
+    ]);
+    expect(items.map(item => item.status)).toEqual(['match-open', 'match-open', 'match-open']);
+  });
+
+  it('excludes unsupported SB raise and BB isolation raise sizes', () => {
+    const items = compareCoinPokerCashHands([
+      cashHand({
+        handId: 'bb-vs-sb-2.5x-raise',
+        heroPosition: 'BB',
+        heroHand: 'AKs',
+        heroFirstAction: 'calls',
+        preflopActions: [
+          { player: 'SB', position: 'SB', action: 'raises', line: 'SB: raises 150 to 250' },
+          { player: 'Hero', position: 'BB', action: 'calls', line: 'Hero: calls 250' },
+        ],
+      }),
+      cashHand({
+        handId: 'bb-vs-sb-limp-2.5x-iso',
+        heroPosition: 'BB',
+        heroHand: 'AKs',
+        heroFirstAction: 'raises',
+        preflopActions: [
+          { player: 'SB', position: 'SB', action: 'calls', line: 'SB: calls 50' },
+          { player: 'Hero', position: 'BB', action: 'raises', line: 'Hero: raises 150 to 250' },
+        ],
+      }),
+    ], cashData);
+
+    expect(items).toMatchObject([
+      { chartName: null, status: 'excluded', exclusionReason: 'cash-chart-not-found' },
+      { chartName: null, status: 'excluded', exclusionReason: 'cash-chart-not-found' },
+    ]);
   });
 });
 
