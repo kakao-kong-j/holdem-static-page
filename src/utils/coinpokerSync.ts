@@ -1,4 +1,5 @@
 import type { CoinPokerHand, CoinPokerGameType } from './coinpokerParser';
+import { selectNewHands } from '../../shared/coinpokerHands';
 
 const ENDPOINT = '/api/coinpoker';
 
@@ -149,10 +150,8 @@ export async function clearCoinPokerHands(type: CoinPokerGameType): Promise<Coin
 
 /** Client-side merge (dedupe by handId) for optimistic updates / offline fallback. */
 export function mergeCoinPokerStore(store: CoinPokerStore, hands: CoinPokerHand[]): CoinPokerStore {
-  const add = (existing: CoinPokerHand[], incoming: CoinPokerHand[]): CoinPokerHand[] => {
-    const seen = new Set(existing.map(h => h.handId));
-    return [...existing, ...incoming.filter(h => !seen.has(h.handId))];
-  };
+  const add = (existing: CoinPokerHand[], incoming: CoinPokerHand[]): CoinPokerHand[] =>
+    [...existing, ...selectNewHands(existing, incoming)];
   return {
     cash: add(store.cash, hands.filter(h => h.gameType !== 'tournament')),
     tournament: add(store.tournament, hands.filter(h => h.gameType === 'tournament')),
