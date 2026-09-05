@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { del, list, put } from '@vercel/blob';
 import { getSessionUser } from './_lib/session.js';
+import { selectNewHands } from '../shared/coinpokerHands.js';
 
 type GameType = 'cash' | 'tournament';
 
@@ -80,8 +81,7 @@ async function appendChunks(sub: string, type: GameType, fresh: StoredHand[]): P
 
 async function mergeType(sub: string, type: GameType, incoming: StoredHand[]): Promise<number> {
   const existing = await readAll(sub, type);
-  const seen = new Set(existing.map(h => h.handId));
-  const fresh = incoming.filter(h => !seen.has(h.handId));
+  const fresh = selectNewHands(existing, incoming);
   if (fresh.length > 0) await appendChunks(sub, type, fresh);
   return fresh.length;
 }
