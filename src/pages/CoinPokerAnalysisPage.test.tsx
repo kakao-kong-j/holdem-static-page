@@ -27,6 +27,10 @@ vi.mock('./coinpoker/useCoinPokerStore', () => ({
   }),
 }));
 
+vi.mock('../components/handReviews/useHandReviews', () => ({
+  useHandReviews: () => ({ reviews: [], ready: true, busy: false, error: null, request: vi.fn() }),
+}));
+
 import { CoinPokerAnalysisPage } from './CoinPokerAnalysisPage';
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;

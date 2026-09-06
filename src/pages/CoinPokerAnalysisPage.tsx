@@ -1,3 +1,5 @@
+import { HandReviewNotebook, SaveHandReviewButton } from '../components/handReviews/HandReviewNotebook';
+import { useHandReviews, type ReviewStore } from '../components/handReviews/useHandReviews';
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 import { RangeGrid } from '../components/RangeGrid';
 import {
@@ -50,6 +52,7 @@ export function CoinPokerAnalysisPage({ fallbackStack, data }: Props) {
     fetchCoinPokerHands,
     pushCoinPokerHands,
   } = useCoinPokerStore();
+  const reviewStore = useHandReviews();
   const [excludeShortStack, setExcludeShortStack] = useState(false); // tournament: drop effective ≤ 10BB
   const [draftText, setDraftText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -245,6 +248,7 @@ export function CoinPokerAnalysisPage({ fallbackStack, data }: Props) {
       : `${(received / (1024 * 1024)).toFixed(1)} MB`;
     return (
       <div className="w-full max-w-7xl mx-auto px-3 sm:px-4">
+        <HandReviewNotebook store={reviewStore} />
         <div className="mx-auto mt-16 flex max-w-sm flex-col items-center gap-4 rounded-lg border border-gray-800 bg-gray-950/30 p-8 text-center">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-700 border-t-indigo-500" />
           <div className="text-sm font-medium text-gray-200">CoinPoker 기록 불러오는 중...</div>
@@ -266,6 +270,7 @@ export function CoinPokerAnalysisPage({ fallbackStack, data }: Props) {
 
   return (
     <div className="w-full max-w-7xl mx-auto px-3 sm:px-4">
+      <HandReviewNotebook store={reviewStore} />
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-3 border border-gray-800 bg-gray-950/30 rounded-lg p-3 sm:p-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -534,7 +539,7 @@ export function CoinPokerAnalysisPage({ fallbackStack, data }: Props) {
               </div>
             </div>
             {selectedHandHistory && (
-              <HandHistoryModal item={selectedHandHistory} onClose={() => setSelectedHandHistory(null)} />
+              <HandHistoryModal reviewStore={reviewStore} item={selectedHandHistory} onClose={() => setSelectedHandHistory(null)} />
             )}
           </>
         )}
@@ -783,7 +788,7 @@ function HoverSelectionPanel({
   );
 }
 
-function HandHistoryModal({ item, onClose }: { item: CoinPokerComparisonItem; onClose: () => void }) {
+function HandHistoryModal({ item, onClose, reviewStore }: { item: CoinPokerComparisonItem; onClose: () => void; reviewStore: ReviewStore }) {
   const parsedDetails = parseHandHistoryDisplay(item);
   const outcome = outcomeTone(item);
 
@@ -808,6 +813,16 @@ function HandHistoryModal({ item, onClose }: { item: CoinPokerComparisonItem; on
           </button>
         </div>
         <div className="max-h-[75vh] overflow-auto p-4">
+          <div className="mb-3">
+            <SaveHandReviewButton store={reviewStore} snapshot={{
+              handId: item.hand.handId,
+              gameType: item.hand.gameType,
+              rawText: item.hand.rawText,
+              heroHand: item.hand.heroHand ?? '알 수 없음',
+              heroPosition: item.hand.heroPosition ?? '알 수 없음',
+              startedAt: item.hand.startedAt,
+            }} />
+          </div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <InfoTile label="Hero" value={`${formatCards(item)} / ${item.hand.heroPosition}`} />
             <InfoTile label="Stack" value={formatStack(item)} />
