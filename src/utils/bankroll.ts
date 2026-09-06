@@ -52,6 +52,28 @@ export interface BankrollSession {
 	tags: string[];
 }
 
+export type SatelliteFilter = "all" | "exclude" | "only";
+
+/** Detect ticket events even when the player did not win a ticket. */
+export function isSatelliteTournament(session: BankrollSession): boolean {
+	if (session.kind !== "tournament") return false;
+	if (session.isTicket) return true;
+	const name = normalizeTicketName(session.name ?? "");
+	return /\bsatellite\b|세틀라이트|새틀라이트/.test(name)
+		|| /\bseats? to\s+\S/.test(name)
+		|| /^step \[\d+\] to\s+\S/.test(name);
+}
+
+export function filterBySatellite(
+	sessions: BankrollSession[],
+	filter: SatelliteFilter,
+): BankrollSession[] {
+	if (filter === "all") return sessions;
+	return sessions.filter((session) =>
+		filter === "only" ? isSatelliteTournament(session) : !isSatelliteTournament(session),
+	);
+}
+
 export interface BankrollParseOptions {
 	ticketPrices?: Record<string, number>;
 	ticketCandidates?: TicketCandidate[];

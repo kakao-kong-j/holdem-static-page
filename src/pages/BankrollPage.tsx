@@ -5,6 +5,8 @@ import {
   computeTagPerformance,
   computeTournamentMetrics,
   filterByDateRange,
+  filterBySatellite,
+  type SatelliteFilter,
   dateBounds,
   summarize,
   formatUsd,
@@ -39,6 +41,7 @@ export function BankrollPage() {
   const [fileError, setFileError] = useState<string | null>(null);
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
+  const [satelliteFilter, setSatelliteFilter] = useState<SatelliteFilter>('all');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<SessionDraft | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -50,8 +53,8 @@ export function BankrollPage() {
 
   const bounds = useMemo(() => dateBounds(sessions), [sessions]);
   const filtered = useMemo(
-    () => filterByDateRange(sessions, from, to),
-    [sessions, from, to],
+    () => filterBySatellite(filterByDateRange(sessions, from, to), satelliteFilter),
+    [sessions, from, to, satelliteFilter],
   );
   const trend = useMemo(() => computeTrend(filtered), [filtered]);
   const tags = useMemo(() => computeTagPerformance(filtered), [filtered]);
@@ -158,6 +161,7 @@ export function BankrollPage() {
     ticketCandidatesRef.current = [];
     setFrom('');
     setTo('');
+    setSatelliteFilter('all');
     setSyncing(true);
     try {
       await clearBankroll('all');
@@ -273,9 +277,22 @@ export function BankrollPage() {
         )}
       </div>
 
-      {/* date range filter */}
+      {/* session filters */}
       {hasData && (
         <div className="flex flex-wrap items-center gap-2 text-xs text-gray-300">
+          <label className="flex items-center gap-2">
+            <span className="text-gray-500">세틀라이트</span>
+            <select
+              aria-label="세틀라이트 필터"
+              value={satelliteFilter}
+              onChange={(e) => setSatelliteFilter(e.target.value as SatelliteFilter)}
+              className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-gray-200"
+            >
+              <option value="all">전체</option>
+              <option value="exclude">세틀라이트 제외</option>
+              <option value="only">세틀라이트만</option>
+            </select>
+          </label>
           <span className="text-gray-500">기간</span>
           <input
             type="date"
@@ -294,15 +311,15 @@ export function BankrollPage() {
             onChange={(e) => setTo(e.target.value)}
             className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-gray-200 [color-scheme:dark]"
           />
-          {(from || to) && (
+          {(from || to || satelliteFilter !== 'all') && (
             <button
-              onClick={() => { setFrom(''); setTo(''); }}
+              onClick={() => { setFrom(''); setTo(''); setSatelliteFilter('all'); }}
               className="px-2.5 py-1.5 bg-gray-800 border border-gray-700 rounded-lg text-gray-400 hover:text-gray-200 transition-colors"
             >
               초기화
             </button>
           )}
-          {(from || to) && (
+          {(from || to || satelliteFilter !== 'all') && (
             <span className="text-gray-500">
               {filtered.length} / {sessions.length} 세션
             </span>
