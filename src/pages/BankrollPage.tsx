@@ -1,3 +1,5 @@
+import { SessionConditionEditor } from "./bankroll/SessionConditionEditor";
+import { saveSessionCondition } from "../utils/bankrollSync";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react';
 import {
   dedupeSessions,
@@ -88,7 +90,7 @@ export function BankrollPage() {
     );
     ticketCandidatesRef.current = importedTicketCandidates;
     const editingSession = sessions.find(
-      (session) => session.id === editingId && session.isTicket,
+      (session) => `${session.kind}:${session.id}` === editingId && session.isTicket,
     );
     const importedEditingTicketPrice = editingSession
       ? findTicketPrize(
@@ -129,7 +131,7 @@ export function BankrollPage() {
     if (errors.length) setFileError(errors.join(' / '));
     const updates = dedupeSessions([...ticketUpdates, ...added]);
     const editingUpdate = updates.find(
-      (session) => session.id === editingId && session.isTicket,
+      (session) => `${session.kind}:${session.id}` === editingId && session.isTicket,
     );
     const editingTicketPrice = importedEditingTicketPrice ?? editingUpdate?.ticketPrice;
     if (editingTicketPrice !== undefined && editingTicketPrice !== null) {
@@ -173,7 +175,7 @@ export function BankrollPage() {
   }
 
   function startEdit(session: BankrollSession) {
-    setEditingId(session.id);
+    setEditingId(`${session.kind}:${session.id}`);
     setDraft(sessionToDraft(session));
     setFileError(null);
   }
@@ -192,7 +194,7 @@ export function BankrollPage() {
     }
 
     const updated = recalculateSessionProfit(parsed.session);
-    setSessions((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+    setSessions((prev) => prev.map((s) => (s.kind === updated.kind && s.id === updated.id ? updated : s)));
     setEditingId(null);
     setDraft(null);
     setSyncing(true);
@@ -208,10 +210,10 @@ export function BankrollPage() {
 
   async function deleteSession(session: BankrollSession) {
     if (!confirm(`이 기록을 삭제할까요?\n${session.name || session.id}`)) return;
-    const remaining = sessions.filter((s) => s.id !== session.id);
+    const remaining = sessions.filter((s) => (s.kind !== session.kind || s.id !== session.id));
     const remainingKind = remaining.filter((s) => s.kind === session.kind);
     setSessions(remaining);
-    if (editingId === session.id) cancelEdit();
+    if (editingId === `${session.kind}:${session.id}`) cancelEdit();
     setSyncing(true);
     try {
       const store = await replaceBankrollSessions(session.kind, remainingKind);
@@ -392,7 +394,7 @@ export function BankrollPage() {
                 </thead>
                 <tbody className="divide-y divide-gray-800">
                   {listedSessions.map((session) => {
-                    const isEditing = editingId === session.id && draft;
+                    const isEditing = editingId === `${session.kind}:${session.id}` && draft;
                     const missingTicketPrice = hasMissingTicketPrice(session);
                     const editingMissingTicketPrice = Boolean(isEditing && session.isTicket && draft.ticketPrice.trim() === '');
                     return (
@@ -429,6 +431,15 @@ export function BankrollPage() {
                               {session.name || session.id}
                             </div>
                           )}
+                          <SessionConditionEditor value={session.condition} disabled={syncing || Boolean(editingId)} onSave={async (condition) => {
+                            setSyncing(true);
+                            try {
+                              const updated = await saveSessionCondition(session.kind, session.id, condition);
+                              setSessions(prev => prev.map(s => s.kind === updated.kind && s.id === updated.id ? updated : s));
+                            } finally {
+                              setSyncing(false);
+                            }
+                          }} />
                         </td>
                         <td className="whitespace-nowrap px-2 py-2 text-right align-top">
                           {isEditing ? (
