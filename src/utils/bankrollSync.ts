@@ -1,3 +1,4 @@
+import type { SessionCondition } from "./sessionCondition";
 import { recalculateSessionProfit, type BankrollSession } from "./bankroll";
 
 const ENDPOINT = "/api/bankroll";
@@ -73,4 +74,18 @@ export async function clearBankroll(
 	});
 	if (!res.ok) throw new Error(`clear failed: ${res.status}`);
 	return normalize(await res.json());
+}
+
+/** Update only annotations, leaving current server financial fields untouched. */
+export async function saveSessionCondition(kind: BankrollSession['kind'], id: string, condition: SessionCondition | null): Promise<BankrollSession> {
+  const res = await fetch(ENDPOINT, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ journal: { kind, id, condition } }),
+  });
+  if (!res.ok) throw new Error(`journal save failed: ${res.status}`);
+  const data = await res.json();
+  if (!data.session || data.session.id !== id || data.session.kind !== kind) throw new Error('invalid journal response');
+  return recalculateSessionProfit(data.session);
 }

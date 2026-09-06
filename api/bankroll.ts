@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { del, head, put } from '@vercel/blob';
+import { isSessionCondition, preserveSessionCondition } from '../src/utils/sessionCondition.js';
 import { getSessionUser } from './_lib/session.js';
 
 type Kind = 'cash' | 'tournament';
@@ -12,6 +13,7 @@ type Kind = 'cash' | 'tournament';
 interface StoredSession {
   id: string;
   kind?: Kind;
+  condition?: unknown;
   [key: string]: unknown;
 }
 
@@ -50,7 +52,7 @@ async function writeSessions(path: string, sessions: StoredSession[]): Promise<v
 function mergeById(existing: StoredSession[], incoming: StoredSession[]): StoredSession[] {
   const byId = new Map<string, StoredSession>();
   for (const s of existing) if (s && typeof s.id === 'string') byId.set(s.id, s);
-  for (const s of incoming) if (s && typeof s.id === 'string') byId.set(s.id, s);
+  for (const s of incoming) if (s && typeof s.id === 'string') byId.set(s.id, preserveSessionCondition(byId.get(s.id), s));
   return [...byId.values()];
 }
 
@@ -95,7 +97,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
   }
 
   if (req.method === 'POST') {
-    const body = (req.body ?? {}) as { sessions?: unknown; clear?: unknown; replace?: unknown };
+    const body = (req.body && typeof req.body === 'object' ? req.body : {}) as { sessions?: unknown; clear?: unknown; replace?: unknown; journal?: unknown };
+
+    if ('journal' in body) {
+      const journal = body.journal as { id?: unknown; kind?: unknown; condition?: unknown } | null;
+      if (!journal || typeof journal.id !== 'string'
+        || (journal.kind !== 'cash' && journal.kind !== 'tournament')
+        || !isSessionCondition(journal.condition)) {
+        res.status(400).json({ error: 'invalid journal' });
+        return;
+      }
+      try {
+        // A failed read must never become an empty store during annotation edits.
+        const path = blobPath(sub, journal.kind);
+        const meta = await head(path);
+        const response = await fetch(`${meta.url}?ts=${Date.now()}`, { cache: 'no-store' });
+        if (!response.ok) throw new Error('read failed');
+        const sessions: unknown = await response.json();
+        if (!Array.isArray(sessions)) throw new Error('invalid store');
+        const index = sessions.findIndex(s => s && s.id === journal.id);
+        if (index < 0) {
+          res.status(404).json({ error: 'session not found' });
+          return;
+        }
+        const updated = { ...sessions[index], condition: journal.condition };
+        sessions[index] = updated;
+        await writeSessions(path, sessions);
+        res.status(200).json({ session: updated });
+      } catch {
+        res.status(503).json({ error: 'journal save failed' });
+      }
+      return;
+    }
+
+    if (Array.isArray(body.sessions) && body.sessions.some(s => s && typeof s === 'object' && 'condition' in s && !isSessionCondition(s.condition))) {
+      res.status(400).json({ error: 'invalid journal' });
+      return;
+    }
 
     if (body.clear === 'cash' || body.clear === 'tournament' || body.clear === 'all') {
       // Return the post-clear state directly. Re-reading via head() right after

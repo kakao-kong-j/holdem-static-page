@@ -1,3 +1,5 @@
+import { preserveSessionCondition, type SessionCondition } from "./sessionCondition";
+
 export type BankrollKind = "cash" | "tournament";
 
 export interface RawCash {
@@ -38,6 +40,7 @@ export interface TicketCandidate {
 }
 
 export interface BankrollSession {
+	condition?: SessionCondition | null;
 	id: string;
 	kind: BankrollKind;
 	datetime: string;
@@ -341,10 +344,13 @@ export function normalizeTournamentSessions(
 		});
 }
 
-/** Merge by id; later entries overwrite earlier ones. */
+/** Merge by kind + id; later fields overwrite, absent condition preserves the journal. */
 export function dedupeSessions(sessions: BankrollSession[]): BankrollSession[] {
 	const byId = new Map<string, BankrollSession>();
-	for (const s of sessions) byId.set(s.id, s);
+	for (const s of sessions) {
+		const key = `${s.kind}:${s.id}`;
+		byId.set(key, preserveSessionCondition(byId.get(key), s));
+	}
 	return [...byId.values()];
 }
 
