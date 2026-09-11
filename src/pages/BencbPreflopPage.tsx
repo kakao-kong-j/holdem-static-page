@@ -48,6 +48,7 @@ function ChartBrowser({ data }: { data: BencbData }) {
   const [filters, setFilters] = useState<BencbFilters>({});
   const [query, setQuery] = useState('');
   const [chartId, setChartId] = useState('');
+  const [hideGrid, setHideGrid] = useState(false);
   const entries = useMemo(() => {
     const indexed = data.charts.map(chart => ({ chart, ...describeBencbChart(chart) }));
     const order = getBencbOptions(indexed, {}, 'strategy');
@@ -85,6 +86,10 @@ function ChartBrowser({ data }: { data: BencbData }) {
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
           <p role="status" className="text-gray-400">{matches.length} / {entries.length}개 차트</p>
+          <label className="flex cursor-pointer items-center gap-2 text-gray-300">
+            <input type="checkbox" checked={hideGrid} onChange={event => setHideGrid(event.target.checked)} className="h-4 w-4 accent-indigo-500" />
+            13×13 차트 숨기기
+          </label>
           <button type="button" onClick={reset} className="rounded border border-gray-700 px-3 py-1.5 text-gray-300 hover:bg-gray-800">필터 초기화</button>
         </div>
         {filters.stack === '여러 스택 통합' && <p className="text-xs text-amber-200">스택별 조건이 원문 범례에 함께 표시된 차트입니다. 선택한 스택의 단독 레인지가 아닙니다.</p>}
@@ -99,7 +104,7 @@ function ChartBrowser({ data }: { data: BencbData }) {
           <button type="button" aria-label="이전 차트" disabled={selectedIndex <= 0} onClick={() => setChartId(matches[selectedIndex - 1].chart.id)} className="rounded-lg border border-gray-700 px-3 py-2.5 text-sm text-gray-300 disabled:opacity-30">이전</button>
           <button type="button" aria-label="다음 차트" disabled={selectedIndex >= matches.length - 1} onClick={() => setChartId(matches[selectedIndex + 1].chart.id)} className="rounded-lg border border-gray-700 px-3 py-2.5 text-sm text-gray-300 disabled:opacity-30">다음</button>
         </div>
-        <ChartDetail key={selected.chart.id} chart={selected.chart} entry={selected} />
+        <ChartDetail key={selected.chart.id} chart={selected.chart} entry={selected} hideGrid={hideGrid} />
       </> : <p className="rounded-xl border border-gray-800 p-8 text-center text-sm text-gray-400">조건에 맞는 차트가 없습니다. 검색어를 바꾸거나 필터를 초기화하세요.</p>}
       <details className="rounded-xl border border-gray-800 p-4 text-sm text-gray-400">
         <summary className="cursor-pointer text-gray-300">데이터 안내 · 불완전 원본 {data.incomplete_sources.length}개</summary>
@@ -111,7 +116,7 @@ function ChartBrowser({ data }: { data: BencbData }) {
   );
 }
 
-function ChartDetail({ chart, entry }: { chart: BencbChart; entry: BencbEntry }) {
+function ChartDetail({ chart, entry, hideGrid }: { chart: BencbChart; entry: BencbEntry; hideGrid: boolean }) {
   const [hand, setHand] = useState('AA');
   const [showJson, setShowJson] = useState(false);
   const missingLegend = chart.legend.some(entry => entry.label === null);
@@ -128,7 +133,7 @@ function ChartDetail({ chart, entry }: { chart: BencbChart; entry: BencbEntry })
       {missingLegend && <p className="rounded-lg border border-amber-800 bg-amber-950/40 p-3 text-sm text-amber-200">원본에 일부 색상의 범례가 없습니다. 해당 핸드의 액션은 ‘범례 없음’으로 표시합니다.</p>}
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
         <div className="min-w-0 space-y-3">
-          <div className="grid gap-px rounded-lg bg-gray-700 p-1" style={{ gridTemplateColumns: 'repeat(13, minmax(0, 1fr))' }} aria-label="Bencb 핸드 차트">
+          {!hideGrid && <div className="grid gap-px rounded-lg bg-gray-700 p-1" style={{ gridTemplateColumns: 'repeat(13, minmax(0, 1fr))' }} aria-label="Bencb 핸드 차트">
             {RANKS.flatMap((_, row) => RANKS.map((__, column) => {
               const value = getHandName(row, column);
               return <button
@@ -143,7 +148,7 @@ function ChartDetail({ chart, entry }: { chart: BencbChart; entry: BencbEntry })
                 style={{ background: handBackground(chart, value), boxShadow: value === hand ? 'inset 0 0 0 3px #111827, inset 0 0 0 5px #fff' : undefined }}
               ><span className="rounded-sm bg-white/80 px-px leading-tight">{value}</span></button>;
             }))}
-          </div>
+          </div>}
           <div aria-label="선택한 핸드 상세" aria-live="polite" className="rounded-xl border border-gray-700 bg-gray-900 p-4">
             <h4 className="text-lg font-bold text-white">{hand}</h4>
             {Object.entries(chart.hands[hand]).map(([id, weight]) => (
