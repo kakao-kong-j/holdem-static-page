@@ -1,18 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { RANKS } from '../constants';
 import { getHandName } from '../utils/hand';
+import { describeBencbChart, filterBencbCharts, getBencbOptions, bencbEntryTitle, LOOKUP_FIELDS, type BencbFilters, type BencbEntry } from '../data/bencbLookup';
 import { BENCB_DATA_URL, handBackground, legendLabel, percent, type BencbChart, type BencbData } from '../data/bencb';
 
 const controlClass = 'w-full min-w-0 rounded-lg border border-gray-700 bg-gray-950 px-3 py-2.5 text-sm text-white';
-const categoryLabels: Record<string, string> = {
-  Openraising: '오픈 레이즈',
-  'Flatting _ 3Betting': '콜 / 3벳',
-  Rejamming: '리잼',
-  'Calling rejams': '리잼 콜',
-  'BB Strategy': 'BB 전략',
-  HU: '헤즈업',
-  Squeezing: '스퀴즈',
-};
+const filterLabels = { strategy: '전략', hero: '내 포지션', opponent: '상대 / 구도', stack: '스택', condition: '추가 조건' };
+
 
 export function BencbPreflopPage() {
   const [data, setData] = useState<BencbData | null>(null);
@@ -51,16 +45,19 @@ export function BencbPreflopPage() {
 }
 
 function ChartBrowser({ data }: { data: BencbData }) {
-  const [category, setCategory] = useState('Openraising');
-  const [subcategory, setSubcategory] = useState('40bb+');
+  const [filters, setFilters] = useState<BencbFilters>({});
+  const [query, setQuery] = useState('');
   const [chartId, setChartId] = useState('');
-  const categories = [...new Set(data.charts.map(chart => chart.category))];
-  const activeCategory = categories.includes(category) ? category : categories[0];
-  const inCategory = data.charts.filter(chart => chart.category === activeCategory);
-  const subcategories = [...new Set(inCategory.map(chart => chart.subcategory))];
-  const activeSubcategory = subcategories.includes(subcategory) ? subcategory : subcategories[0];
-  const charts = inCategory.filter(chart => chart.subcategory === activeSubcategory);
-  const selected = charts.find(chart => chart.id === chartId) ?? charts[0];
+  const entries = useMemo(() => {
+    const indexed = data.charts.map(chart => ({ chart, ...describeBencbChart(chart) }));
+    const order = getBencbOptions(indexed, {}, 'strategy');
+    return indexed.sort((a, b) => order.indexOf(a.strategy) - order.indexOf(b.strategy)
+      || bencbEntryTitle(a).localeCompare(bencbEntryTitle(b), 'ko', { numeric: true }));
+  }, [data]);
+  const matches = filterBencbCharts(entries, filters, query);
+  const selected = matches.find(entry => entry.chart.id === chartId) ?? matches[0];
+  const selectedIndex = selected ? matches.indexOf(selected) : -1;
+  const reset = () => { setFilters({}); setQuery(''); setChartId(''); };
 
   return (
     <div className="space-y-5">
@@ -72,24 +69,38 @@ function ChartBrowser({ data }: { data: BencbData }) {
         </div>
         <a className="rounded-lg border border-gray-700 px-3 py-2 text-sm text-gray-200 hover:bg-gray-800" href={BENCB_DATA_URL} download="bencb-preflop-charts.json">전체 JSON 다운로드</a>
       </div>
-      <div className="grid gap-3 rounded-xl border border-gray-800 bg-gray-900/60 p-4 sm:grid-cols-3">
-        <label className="space-y-1 text-xs text-gray-400">카테고리
-          <select aria-label="카테고리" className={controlClass} value={activeCategory} onChange={event => { setCategory(event.target.value); setSubcategory(''); setChartId(''); }}>
-            {categories.map(value => <option key={value} value={value}>{categoryLabels[value] ?? value}</option>)}
-          </select>
+      <div className="space-y-4 rounded-xl border border-gray-800 bg-gray-900/60 p-4">
+        <label className="block space-y-1 text-xs text-gray-400">차트 검색 · 선택한 필터 안에서 검색
+          <input aria-label="차트 검색" type="search" className={controlClass} value={query}
+            onChange={event => setQuery(event.target.value)} placeholder="예: BTN CO 50bb, 헤즈업 림프, 오픈 12%" />
         </label>
-        <label className="space-y-1 text-xs text-gray-400">스택 / 포지션
-          <select aria-label="스택 / 포지션" className={controlClass} value={activeSubcategory} onChange={event => { setSubcategory(event.target.value); setChartId(''); }}>
-            {subcategories.map(value => <option key={value}>{value}</option>)}
-          </select>
-        </label>
-        <label className="space-y-1 text-xs text-gray-400">상황 · {charts.length}개
-          <select aria-label="차트" className={controlClass} value={selected.id} onChange={event => setChartId(event.target.value)}>
-            {charts.map(chart => <option key={chart.id} value={chart.id}>{chart.scenario}</option>)}
-          </select>
-        </label>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+          {LOOKUP_FIELDS.map(field => <label key={field} className={`space-y-1 text-xs text-gray-400 ${field === 'condition' ? 'col-span-2 lg:col-span-1' : ''}`}>{filterLabels[field]}
+            <select aria-label={filterLabels[field]} className={controlClass} value={filters[field] ?? ''}
+              onChange={event => setFilters(previous => ({ ...previous, [field]: event.target.value }))}>
+              <option value="">전체</option>
+              {getBencbOptions(entries, filters, field).map(value => <option key={value} value={value}>{value}</option>)}
+            </select>
+          </label>)}
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+          <p role="status" className="text-gray-400">{matches.length} / {entries.length}개 차트</p>
+          <button type="button" onClick={reset} className="rounded border border-gray-700 px-3 py-1.5 text-gray-300 hover:bg-gray-800">필터 초기화</button>
+        </div>
+        {filters.stack === '여러 스택 통합' && <p className="text-xs text-amber-200">스택별 조건이 원문 범례에 함께 표시된 차트입니다. 선택한 스택의 단독 레인지가 아닙니다.</p>}
       </div>
-      <ChartDetail key={selected.id} chart={selected} />
+      {selected ? <>
+        <div className="flex items-end gap-2">
+          <label className="min-w-0 flex-1 space-y-1 text-xs text-gray-400">조회 결과 · {selectedIndex + 1} / {matches.length}
+            <select aria-label="차트" className={controlClass} value={selected.chart.id} onChange={event => setChartId(event.target.value)}>
+              {matches.map(entry => <option key={entry.chart.id} value={entry.chart.id}>{bencbEntryTitle(entry)}</option>)}
+            </select>
+          </label>
+          <button type="button" aria-label="이전 차트" disabled={selectedIndex <= 0} onClick={() => setChartId(matches[selectedIndex - 1].chart.id)} className="rounded-lg border border-gray-700 px-3 py-2.5 text-sm text-gray-300 disabled:opacity-30">이전</button>
+          <button type="button" aria-label="다음 차트" disabled={selectedIndex >= matches.length - 1} onClick={() => setChartId(matches[selectedIndex + 1].chart.id)} className="rounded-lg border border-gray-700 px-3 py-2.5 text-sm text-gray-300 disabled:opacity-30">다음</button>
+        </div>
+        <ChartDetail key={selected.chart.id} chart={selected.chart} entry={selected} />
+      </> : <p className="rounded-xl border border-gray-800 p-8 text-center text-sm text-gray-400">조건에 맞는 차트가 없습니다. 검색어를 바꾸거나 필터를 초기화하세요.</p>}
       <details className="rounded-xl border border-gray-800 p-4 text-sm text-gray-400">
         <summary className="cursor-pointer text-gray-300">데이터 안내 · 불완전 원본 {data.incomplete_sources.length}개</summary>
         <p className="mt-3">흰색은 원본의 미표시 영역입니다. 액션을 임의로 폴드로 해석하지 않습니다. 범례의 스택 조건은 원문 그대로이며, 누적 레인지로 확장하지 않았습니다.</p>
@@ -100,7 +111,7 @@ function ChartBrowser({ data }: { data: BencbData }) {
   );
 }
 
-function ChartDetail({ chart }: { chart: BencbChart }) {
+function ChartDetail({ chart, entry }: { chart: BencbChart; entry: BencbEntry }) {
   const [hand, setHand] = useState('AA');
   const [showJson, setShowJson] = useState(false);
   const missingLegend = chart.legend.some(entry => entry.label === null);
@@ -109,9 +120,11 @@ function ChartDetail({ chart }: { chart: BencbChart }) {
   return (
     <section className="space-y-4">
       <div>
-        <h3 className="text-lg font-semibold text-white">{categoryLabels[chart.category] ?? chart.category} · {chart.subcategory} · {chart.scenario}</h3>
+        <h3 className="text-lg font-semibold text-white">{bencbEntryTitle(entry)}</h3>
         <p className="mt-1 text-sm text-gray-400">표시 레인지 {chart.total_marked_combos.toLocaleString('ko-KR')} / 1,326 콤보 · {percent(chart.total_marked_combos / 1326)}</p>
       </div>
+      {entry.stackDetail && <p className="text-sm text-gray-300">원문 스택: {entry.stackDetail} · 통합 차트</p>}
+      {entry.note && <p className="text-xs leading-relaxed text-amber-200">{entry.note}</p>}
       {missingLegend && <p className="rounded-lg border border-amber-800 bg-amber-950/40 p-3 text-sm text-amber-200">원본에 일부 색상의 범례가 없습니다. 해당 핸드의 액션은 ‘범례 없음’으로 표시합니다.</p>}
       <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
         <div className="min-w-0 space-y-3">
