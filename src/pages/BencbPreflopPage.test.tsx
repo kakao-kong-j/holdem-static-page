@@ -12,7 +12,7 @@ import { getViewMeta } from '../app/viewRegistry';
 function fixtureChart(id: string, category: string, subcategory: string): BencbChart {
   const hands = Object.fromEntries(RANKS.flatMap((_, row) => RANKS.map((__, column) => [getHandName(row, column), { unmarked: 1 }])));
   return {
-    id, category, subcategory, scenario: '테스트 상황', source: 'synthetic-test.png',
+    id, category, subcategory, scenario: category === 'Flatting _ 3Betting' ? 'BTN vs CO' : category === 'Calling rejams' ? 'vs CO' : 'BTN', source: 'synthetic-test.png',
     hands: { ...hands, A5s: { color_4caf50: 0.5, color_ffc107: 0.5 }, '86s': { color_2196f3: 1 } },
     legend: [
       { id: 'color_4caf50', color: '#4caf50', label: 'flatcall', combo_count: 2 },
@@ -52,8 +52,10 @@ it('switches dependent filters and displays a mixed hand', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => payload })));
   const c = await mount();
   expect(c.querySelectorAll('[data-hand]')).toHaveLength(169);
-  select(c, '카테고리', 'Flatting _ 3Betting');
-  select(c, '스택 / 포지션', '50bb+');
+  select(c, '전략', '콜 / 3벳');
+  select(c, '내 포지션', 'BTN');
+  select(c, '상대 / 구도', 'CO 오픈');
+  select(c, '스택', '50 BB+');
   select(c, '차트', 'flatting_3betting_50bb_btn_vs_co');
   const hand = c.querySelector<HTMLButtonElement>('[data-hand="A5s"]')!;
   expect(hand.style.background).toContain('linear-gradient');
@@ -62,15 +64,16 @@ it('switches dependent filters and displays a mixed hand', async () => {
   expect(detail.textContent).toContain('A5s');
   expect(detail.textContent).toContain('50%');
   expect(detail.textContent).toContain('3B / Fold');
-  select(c, '카테고리', 'Calling rejams');
+  act(() => [...c.querySelectorAll('button')].find(b => b.textContent === '필터 초기화')!.click());
+  select(c, '전략', '리잼 콜');
   expect(c.querySelectorAll('[data-hand]')).toHaveLength(169);
-  expect(c.querySelector('h2')?.textContent).not.toContain('Flatting');
+  expect(c.querySelector('h3')?.textContent).toContain('리잼 콜');
 });
 it('keeps missing legends and unmarked cells distinct from fold', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => payload })));
   const c = await mount();
-  select(c, '카테고리', 'Flatting _ 3Betting');
-  select(c, '스택 / 포지션', '40-50bb');
+  select(c, '전략', '콜 / 3벳');
+  select(c, '스택', '40–50 BB');
   select(c, '차트', 'flatting_3betting_40_50bb_sb_vs_co');
   act(() => c.querySelector<HTMLButtonElement>('[data-hand="86s"]')!.click());
   expect(c.querySelector('[aria-label="선택한 핸드 상세"]')?.textContent).toContain('범례 없음');
@@ -83,5 +86,25 @@ it('shows a retry action on failed fetch and recovers', async () => {
   const c = await mount();
   expect(c.querySelector('[role="alert"]')?.textContent).toContain('503');
   await act(async () => { c.querySelector<HTMLButtonElement>('button')!.click(); });
+  expect(c.querySelectorAll('[data-hand]')).toHaveLength(169);
+});
+
+it('searches across chart conditions and recovers from no results', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => payload })));
+  const c = await mount();
+  const input = c.querySelector<HTMLInputElement>('input[aria-label="차트 검색"]')!;
+  function search(value: string) {
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  }
+  search('BTN CO 50bb+');
+  expect(c.querySelectorAll('select[aria-label="차트"] option')).toHaveLength(1);
+  expect(c.querySelector('h3')?.textContent).toContain('50 BB+');
+  search('없는차트');
+  expect(c.textContent).toContain('조건에 맞는 차트가 없습니다');
+  expect(c.querySelectorAll('[data-hand]')).toHaveLength(0);
+  act(() => [...c.querySelectorAll('button')].find(b => b.textContent === '필터 초기화')!.click());
   expect(c.querySelectorAll('[data-hand]')).toHaveLength(169);
 });
