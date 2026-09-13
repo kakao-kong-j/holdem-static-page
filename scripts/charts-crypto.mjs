@@ -2,7 +2,11 @@ import { mkdtempSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-const chartNames = ['gto-preflop-charts-all', 'gto-cache-preflop-chart', 'bencb-preflop-charts'];
+const chartPaths = [
+  'public/gto-preflop-charts-all.json', 'public/gto-cache-preflop-chart.json',
+  'public/bencb-preflop-charts.json', 'public/tournament-flop-cbet.json',
+  'scripts/data/flop-board-textures.json',
+];
 
 function validateJson(path) {
   try {
@@ -23,9 +27,10 @@ function run(mode) {
   const staging = mkdtempSync(join(directory, '.charts-crypto-'));
   try {
     const replacements = [];
-    for (const name of chartNames) {
-      const source = join(directory, `${name}.json${mode === 'decrypt' ? '.enc' : ''}`);
-      const filename = `${name}.json${mode === 'encrypt' ? '.enc' : ''}`;
+    for (const path of chartPaths) {
+      const source = resolve(`${path}${mode === 'decrypt' ? '.enc' : ''}`);
+      const destination = resolve(`${path}${mode === 'encrypt' ? '.enc' : ''}`);
+      const filename = basename(destination);
       const output = join(staging, filename);
       if (mode === 'encrypt') validateJson(source);
       const result = spawnSync('openssl', [
@@ -34,7 +39,7 @@ function run(mode) {
       ], { stdio: ['ignore', 'ignore', 'pipe'] });
       if (result.error || result.status !== 0) throw new Error(`Could not ${mode} ${basename(source)}; check DATA_KEY and the input file.`);
       if (mode === 'decrypt') validateJson(output);
-      replacements.push({ output, destination: join(directory, filename) });
+      replacements.push({ output, destination });
     }
     // Never replace any existing output if conversion/validation of another input fails.
     for (const { output, destination } of replacements) renameSync(output, destination);
