@@ -1,102 +1,40 @@
-# CLAUDE.md
+# Claude Code 저장소 안내
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+이 저장소의 공통 작업 규칙은 [AGENTS.md](AGENTS.md)에 있습니다. 작업 전에 해당 문서를 읽고 따릅니다. 설치·실행·환경변수·배포 명령은 [README.md](README.md)를 기준으로 확인합니다.
 
-## Project Overview
+## 프로젝트 개요
 
-GTO (Game Theory Optimal) preflop charts visualization app for poker. Displays 13x13 hand grids showing optimal actions per position/stack depth. Korean UI. Deployed on Vercel (active; Google login + per-user data via serverless `/api`); GitHub Pages deployment has been removed.
+한국어 Holdem 학습·기록 앱입니다. 프리플랍 차트, Bencb, 플랍 C-bet, 캐시 레인지, 퀴즈·통계, CoinPoker 분석·복기 노트, 뱅크롤·컨디션, 거래내역, 팟오즈 계산기를 제공합니다.
 
-## Tech Stack
+React 19 / TypeScript / Vite 8 / Tailwind CSS 4를 사용합니다. 별도 라우터나 차트 라이브러리 없이 상태 기반 화면 전환과 커스텀 차트를 사용합니다. 배포는 Vercel이며 Google OAuth와 Blob 저장을 위한 `/api`가 필요합니다.
 
-- React + TypeScript + Vite
-- Tailwind CSS (via @tailwindcss/vite)
-- No external charting libraries (grids are custom-built)
-- Vercel Functions (`/api`) for auth + user data; `jose` (JWT), `@vercel/blob` (storage)
-- Deploy: Vercel (active); GitHub Pages deployment removed
+## 작업별 진입점
 
-## Build & Dev Commands
+| 작업 | 먼저 확인할 파일 |
+| --- | --- |
+| 메뉴·탭·레이아웃 | `src/App.tsx`, `src/app/viewRegistry.tsx`, `src/components/AppShell.tsx` |
+| 로그인·세션 | `src/hooks/useAuth.ts`, `src/components/LoginGate.tsx`, `api/auth/`, `api/_lib/` |
+| 기본 차트·SB·상대 대응 | `src/hooks/useChartData.ts`, `src/utils/hand.ts`, `src/utils/chartDataValidation.ts`, `src/utils/scenarioMap.ts`, `src/pages/SbOpenPage.tsx` |
+| Bencb 필터·검색 | `src/pages/BencbPreflopPage.tsx`, `src/data/bencb.ts`, `src/data/bencbLookup.ts` |
+| 플랍 C-bet·보드 매칭 | `src/pages/FlopCbetPage.tsx`, `src/data/flopCbet.ts`, `src/data/flopBoardMatch.ts`, `src/components/FlopBoardLookup.tsx` |
+| 캐시 레인지 | `src/pages/CashHandRangePage.tsx`, `src/utils/cashRange.ts`, `src/components/CashRangeGrid.tsx` |
+| 퀴즈·통계 | `src/pages/QuizPage.tsx`, `src/pages/QuizStatsPage.tsx`, `src/utils/recordsSync.ts`, `api/records.ts` |
+| CoinPoker 파싱·저장 | `src/utils/coinpokerParser.ts`, `src/utils/coinpokerCompare.ts`, `src/pages/coinpoker/useCoinPokerStore.ts`, `src/utils/coinpokerSync.ts`, `shared/coinpokerHands.ts`, `api/coinpoker.ts` |
+| 복기 노트 | `src/components/handReviews/`, `shared/handReviews.ts`, `api/hand-reviews.ts` |
+| 뱅크롤·컨디션 | `src/pages/BankrollPage.tsx`, `src/pages/bankroll/`, `src/utils/bankroll.ts`, `src/utils/sessionCondition.ts`, `api/bankroll.ts` |
+| 거래내역 | `src/pages/TransactionsPage.tsx`, `src/utils/transactions.ts`, `src/utils/transactionsSync.ts`, `api/transactions.ts` |
+| 팟오즈·필요 에쿼티 | `src/pages/EquityCalculatorPage.tsx` |
+| 암복호화·데이터 변환 | `scripts/charts-crypto.mjs`, `scripts/convert_flop_cbet.py`, `docs/flop-cbet-data.md` |
 
-```bash
-npm install
-npm run dev        # Vite dev server (base: /)
-npm run build      # Production build → dist/
-npm run preview    # Preview production build
-```
+## 혼동하기 쉬운 점
 
-## Architecture
+- SB Open은 15·25·40·100BB 모두 사용합니다. 과거의 “15/100BB 전용” 설명과 고정 콤보 합계는 현재 구현 기준으로 다시 확인해야 합니다.
+- `npm run dev`만으로 로그인과 서버 저장이 동작하지 않습니다. 화면 개발에는 개발 전용 인증 우회와 복호화된 데이터가 필요하고, 실제 계정 기능에는 `npm run dev:vercel`과 서버 환경변수가 필요합니다.
+- `npm run build`는 차트를 복호화하지 않습니다. 배포 명령 `npm run build:vercel`이 다섯 데이터 파일을 복호화한 뒤 빌드합니다.
+- CoinPoker는 불변 청크를 추가하지만 퀴즈·뱅크롤·거래내역·복기 노트는 단일 JSON을 갱신합니다. 모든 기능이 같은 저장·오프라인 동작을 갖는다고 가정하지 않습니다.
+- 에쿼티 화면은 필요 에쿼티 계산기입니다. 카드 대 레인지 계산은 구현된 기능으로 설명하지 않습니다.
+- `docs/superpowers/`의 계획과 상세 문서의 과거 검증 수치는 이력입니다. 현재 구현 여부와 검증 결과를 코드 및 이번 실행으로 확인합니다.
 
-### Data
+## 검증
 
-- `public/gto-preflop-charts-all.json` (~170KB) - GTO preflop data for 4 stack sizes (15BB/25BB/40BB/100BB)
-- Loaded via `fetch` at runtime (NOT imported directly)
-- Structure: `json.data[stackSize][chartName][action] = string[]`
-- Hands not present in a chart are treated as "fold"
-
-### Views (tab-based, no router)
-
-1. **Open Range** - Earliest non-SB position each hand can open from (UTG through BTN). Color = position color. One grid per stack size. SB is excluded here and lives in its own tab.
-2. **SB Open** - Dedicated view for SB's RFI range. Available at 15BB (call / all-in) and 100BB (limp / raise / raise_bluff). Not shown at 25/40BB where SB uses the standard RFI structure.
-3. **Facing Charts** - Specific situation charts. Two categories: `상대 오픈 대응` (Facing RFI / BvB) and `내 오픈 후 대응` (RFI vs Allin at 15BB, RFI vs 3bet at 100BB). Color = action color. Dropdown selectors for hero/villain; the second category is filtered out at stacks where no matching charts exist.
-4. **Quiz / Stats** - Practice quiz against chart data, plus stats (profile radar, accuracy, wrong list, GTO-vs-your-answer compare grid).
-
-### Authentication & User Data (Vercel only)
-
-- **Login**: Google OAuth via serverless functions in `/api` (hand-rolled OAuth2 + PKCE, no `arctic`). Session is a JWT (`jose`, HS256) in an httpOnly cookie. The whole app is gated behind login (`LoginGate` / `useAuth` → `/api/auth/me`).
-- **Password gate**: the login form POSTs to `/api/auth/google` with the shared page password; the server checks it against `PAGE_PASSWORD_HASH` (sha256 hex) and only then starts the OAuth redirect. Wrong/empty password → `/?login_error=password`. Enforced server-side (cannot bypass by hitting `/api/auth/google` directly).
-- **Per-user storage**: quiz records persist to **Vercel Blob** at `users/{googleSub}/records.json` (single file; read → merge-by-`timestamp` → overwrite). No database. `lost-update` is accepted (single-user, non-concurrent assumption).
-- **Sync model**: localStorage stays the working store; `src/utils/recordsSync.ts` reconciles with the server on login, after each quiz answer, and on import/clear. All sync calls swallow errors so plain `npm run dev` (no `/api`) still works locally.
-- **Requires `/api`**: login/sync only run on Vercel. Plain `vite` dev → use `vercel dev` to exercise auth. **GitHub Pages cannot serve `/api`, so login does not work there** — Vercel is the deployment for the authenticated app.
-- Full design + setup steps: `docs/LOGIN_PLAN.md`. API files: `api/auth/*`, `api/records.ts`, `api/_lib/*`.
-
-### Key Source Files
-
-- `src/constants.ts` - ACTION_COLORS (16 types), POSITION_COLORS (8 positions), RANKS, OPENER_TO_3BETTOR mapping
-- `src/utils/hand.ts` - getHandName, getCombos, buildHandAction, buildOpenRangeData
-- `src/utils/chartGroup.ts` - Chart name → group classification (RFI/Facing RFI/RFI vs All-In/RFI vs 3bet/BvB)
-- `src/components/RangeGrid.tsx` - 13x13 grid component
-- `src/pages/OpenRangePage.tsx` - Open Range view
-- `src/pages/FacingPage.tsx` - Facing Charts view (includes 100BB RFI vs 3bet dual-dropdown UI)
-
-### 100BB Special Cases
-
-- threebet split into value/bluff, plus "RFI vs 3bet" category (27 reachable charts; `SB RFI vs BB 3bet` is intentionally filtered in `scenarioMap.ts`)
-- SB RFI has raise / raise_bluff / limp — rendered in the dedicated SB Open tab, NOT in the main Open Range
-- "RFI vs 3bet" UI: opener → 3bettor dropdown pair, villain filtered by `OPENER_TO_3BETTOR`
-
-### 15BB Special Cases
-
-- "RFI vs Allin" exists as both specific ("X RFI vs Y Allin") and generic ("X RFI vs Allin") forms. The generic form expands villain to every position after the opener.
-- SB Open tab shows the push/fold range: call vs all-in actions.
-
-## Validation
-
-Combo totals (must match exactly; total = 1326 per stack).
-
-**Open Range view** (UTG → BTN, SB/BB excluded):
-| Stack | open | fold |
-|---|---:|---:|
-| 15BB  | 518 | 808 |
-| 25BB  | 614 | 712 |
-| 40BB  | 674 | 652 |
-| 100BB | 678 | 648 |
-
-**SB Open view** (SB's RFI only; tab exists at 15BB and 100BB only):
-| Stack | open (breakdown) | fold |
-|---|---:|---:|
-| 15BB  | 1110 (call 804 + allIn 306) | 216 |
-| 100BB | 934 (limp 644 + raise 118 + raise_bluff 172) | 392 |
-
-Historical note: prior revisions of this doc listed combined totals (e.g. 1020/306 at 15BB, 934/392 at 100BB) that predated the Open Range / SB Open tab split. Those numbers are stale; use the tables above.
-
-## Deployment
-
-**Vercel** (active):
-- Config: `vercel.json` (framework=vite, buildCommand=`npm run build:vercel`)
-- Vite serves from the root path (`base: '/'`)
-- Required env vars in Vercel dashboard: `DATA_KEY` (for `openssl` decrypt), `PAGE_PASSWORD_HASH`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `JWT_SECRET`
-- Optional env var: `GOOGLE_REDIRECT_URI` (callback URL is derived from the request host when unset)
-- Vercel Blob: link a Blob store so `BLOB_READ_WRITE_TOKEN` is auto-injected; set it manually only for local `vercel dev` against a remote store
-- Same source data (`public/gto-preflop-charts-all.json.enc`) decrypted at build
-
-**GitHub Pages**:
-- Removed. The app now depends on Vercel API routes for Google auth and server-side persistence, so GitHub Pages is no longer a supported deployment target.
+기능 변경에는 `npm test`, `npm run lint`, `npm run build`를 실행합니다. 플랍 변환기 변경에는 Python unittest도 실행합니다. 문서 변경은 링크·경로·명령·코드 대조와 `git diff --check`로 검증합니다. 세부 데이터 의미와 저장 계약은 `AGENTS.md`에 모아 관리합니다.
