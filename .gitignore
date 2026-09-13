@@ -17,6 +17,8 @@ dist-ssr
 public/gto-preflop-charts-all.json
 public/gto-cache-preflop-chart.json
 public/bencb-preflop-charts.json
+public/tournament-flop-cbet.json
+scripts/data/flop-board-textures.json
 output/bencb-preflop/*.json
 public/.charts-crypto-*/
 
@@ -38,4 +40,6 @@ public/.charts-crypto-*/
 # Local worktrees
 .worktrees/
 
+# Python conversion tools
+__pycache__/
 

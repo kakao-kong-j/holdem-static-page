@@ -1,4 +1,5 @@
 import { BencbPreflopPage } from '../pages/BencbPreflopPage';
+import { FlopCbetPage } from '../pages/FlopCbetPage';
 import { OpenRangePage } from '../pages/OpenRangePage';
 import { SbOpenPage } from '../pages/SbOpenPage';
 import { FacingPage } from '../pages/FacingPage';
@@ -11,7 +12,7 @@ import { EquityCalculatorPage } from '../pages/EquityCalculatorPage';
 import { CashHandRangePage } from '../pages/CashHandRangePage';
 import type { AllData, QuizQuestion, StackSize } from '../types';
 
-export type View = 'bencb-preflop' | 'open-range' | 'sb-open' | 'facing' | 'cash-range' | 'quiz' | 'quiz-stats' | 'coinpoker' | 'bankroll' | 'transactions' | 'equity';
+export type View = 'bencb-preflop' | 'flop-cbet' | 'open-range' | 'sb-open' | 'facing' | 'cash-range' | 'quiz' | 'quiz-stats' | 'coinpoker' | 'bankroll' | 'transactions' | 'equity';
 
 export type NavigateIntent =
   | { kind: 'chart'; stack: StackSize; chartName: string; viewType: 'open-range' | 'sb-open' | 'facing' }
@@ -32,6 +33,7 @@ export const VIEWS: ViewMeta[] = [
   { value: 'sb-open', label: 'SB Open', maxWidth: 'normal', showStackTabs: true },
   { value: 'facing', label: 'Facing Charts', maxWidth: 'normal', showStackTabs: true },
   { value: 'bencb-preflop', label: 'Bencb 프리플랍', maxWidth: 'wide', showStackTabs: false },
+  { value: 'flop-cbet', label: '플랍 C-bet', maxWidth: 'wide', showStackTabs: false },
   { value: 'cash-range', label: '캐시 핸드레인지', maxWidth: 'normal', showStackTabs: false },
   { value: 'quiz', label: '퀴즈', maxWidth: 'normal', showStackTabs: false },
   { value: 'quiz-stats', label: '통계', maxWidth: 'normal', showStackTabs: false },
@@ -62,6 +64,8 @@ export function renderView(args: {
       return <FacingPage stackData={stackData} />;
     case 'bencb-preflop':
       return <BencbPreflopPage />;
+    case 'flop-cbet':
+      return <FlopCbetPage />;
     case 'cash-range':
       return <CashHandRangePage />;
     case 'quiz':
