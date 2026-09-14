@@ -36,7 +36,7 @@
 }
 ```
 
-위 예시의 URL은 생략했다. 실제 JSON에는 해당 빈도 셀에 연결된 원본 Google Drive 링크가 보존되어 있다. 조회 행의 원본 버튼을 누를 때만 모달 안에서 Google Drive 미리보기를 불러온다. 닫기 버튼, 모달 바깥 클릭, Esc로 닫으며 원본 이미지는 별도로 다운로드하지 않는다.
+위 예시의 URL은 생략했다. 실제 JSON에는 해당 빈도 셀에 연결된 원본 Google Drive 링크가 출처로 보존되어 있다. 조회 행과 직접 보드 조회의 원본 버튼은 `public/flop-cbet-images.json`에서 해당 Drive 파일 ID에 연결된 Vercel Blob URL을 찾아 이미지를 직접 표시한다. 브라우저는 Drive 미리보기를 요청하지 않는다. 닫기 버튼, 모달 바깥 클릭, Esc로 닫으며 이미지 로딩·오류·재시도를 표시한다. 이미지 목록이나 이미지 요청이 실패해도 전략 조회는 유지된다.
 
 - `spot`: `srp-ip`, `srp-oop`, `blind-war`, `3bp-oop`, `3bp-ip`, `4bp-oop`, `4bp-ip`
 - `profile`: `GTO`, `Calling Station`, `Maniac`
@@ -46,6 +46,33 @@
 - `frequency_pct`: 0–100 사이의 베팅 빈도. 예를 들어 99.7은 99.7%다.
 
 현재 데이터는 각 보드에 사이즈 하나와 빈도 하나를 담고 있다. 여러 사이즈의 혼합 전략이나 전체 핸드별 전략으로 확장하지 않는다. 조회 평균은 검색 결과에 포함된 보드들의 단순 평균이다. 사이즈별 평균은 해당 사이즈가 지정된 보드만 대상으로 한다. 플랍 발생 확률로 가중하지 않는다.
+
+## 원본 이미지 이전
+
+`scripts/migrate-flop-images.mjs`는 복호화된 전략 JSON의 모든 프로필에서 이미지 ID를 중복 제거하고, 원본 바이트를 public Vercel Blob의 `flop-cbet/<Drive 파일 ID>`에 저장한다. 확장자는 붙이지 않고 PNG/JPEG/GIF/WebP의 파일 시그니처로 Content-Type을 지정한다. HTML 권한 안내나 20 MiB 초과 응답은 거부한다. public Blob 이미지는 URL을 아는 사람이 로그인 없이 접근할 수 있다.
+
+**전체 실행 전에 Vercel 대시보드의 저장 공간과 Advanced Operations 잔여량을 확인한다.** 현재 원본은 7,935개 파일이고, 3,146개 표본의 원본 크기는 1,036,673,861바이트다. 전체 크기는 약 2.6GB로 추정되며 업로드 횟수도 약 8천 회 필요하다. [Vercel Blob 사용량 안내](https://vercel.com/docs/vercel-blob/usage-and-pricing)의 Hobby 포함량(저장 1GB, Advanced Operations 2,000회)을 넘는다. 동일 저장소를 쓰는 기존 기록 기능도 한도 초과의 영향을 받을 수 있으므로, 필요한 한도 확보와 저장소 접근 확인 후 실행한다. 파일 삭제만으로 정지가 즉시 풀린다고 가정하지 않는다.
+
+```sh
+# 기존 프로젝트 환경을 별도 로컬 파일로 가져온다. 키 값을 출력하거나 커밋하지 않는다.
+vercel env pull .env.migration.local --environment=production
+
+# 평문 차트가 없는 새 체크아웃
+node --env-file=.env.migration.local scripts/charts-crypto.mjs decrypt
+
+# 일부 업로드로 먼저 확인 (최종 이미지 목록은 아직 교체하지 않음)
+node --env-file=.env.migration.local scripts/migrate-flop-images.mjs --limit=3
+
+# 전체 이전. 중단된 경우 같은 명령으로 재개한다.
+node --env-file=.env.migration.local scripts/migrate-flop-images.mjs
+```
+
+Node.js 22 이상, 네트워크 접근과 `BLOB_READ_WRITE_TOKEN`이 필요하다. 복호화에는 추가로 `DATA_KEY`와 OpenSSL이 필요하다. 환경변수를 이미 셸에 설정했다면 `npm run migrate:flop-images`도 사용할 수 있다. 기본 동시 작업은 4개이며 `--concurrency=1`부터 `8`까지 지정할 수 있다.
+
+이미 존재하는 동일 경로의 Blob은 메타데이터를 확인해 재사용하며 덮어쓰거나 삭제하지 않는다. 새 업로드는 응답 크기·형식을 Blob 메타데이터와 대조한다. 검증 완료 기록은 Git 제외 경로 `output/flop-cbet-images/progress.local`에 누적한다. 완료 기록이 없는 기존 Blob은 원본을 다시 내려받아 크기·형식을 검증하므로, 이전 실행의 검증 실패를 재실행으로 건너뛰지 않는다. 실패 또는 부분 실행에서는 기존 `public/flop-cbet-images.json`을 유지하고, 전체 파일 검증이 성공했을 때만 파일 ID → URL 목록을 원자적으로 교체한다. 실패가 20개 쌓이거나 저장소 정지 오류를 받으면 추가 작업을 멈춘다. 이미 업로드한 파일은 다음 실행에서 재사용한다. 원본 Drive 파일이 같은 ID에서 수정된 경우 자동 갱신하지 않는다.
+
+생성된 이미지 목록은 전략 값·비밀키를 포함하지 않으며 Git에 포함해 배포한다. 이미지 자체는 Blob에만 보관한다. 기존 전략 JSON, 암호화본 5개, 변환기는 변경하지 않으므로 차트 재변환이나 사용자 기록 재수입이 필요 없다. Vercel 배포에는 생성된 목록과 새 화면 코드가 함께 포함돼야 한다.
+
 
 ## 숫자 표기 수정
 

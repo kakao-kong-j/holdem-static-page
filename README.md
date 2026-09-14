@@ -81,7 +81,9 @@ npm run test:watch   # Vitest 감시 모드 (Node 암복호화 테스트 제외)
 python3 -m unittest discover -s scripts -p 'test_convert_flop_cbet.py'
 ```
 
-`npm run build`는 복호화를 수행하지 않습니다. 빌드 성공만으로 차트 파일 준비나 로그인·서버 저장 성공이 검증되지는 않습니다. Python 변환기 테스트는 `npm test`와 별도로 실행합니다.
+`npm run build`는 복호화를 수행하지 않습니다. 빌드 성공만으로 차트 파일 준비나 로그인·서버 저장 성공이 검증되지는 않습니다. `npm test`는 Vitest와 Node 암복호화·이미지 이전 테스트를 포함합니다. Python 변환기 테스트는 별도로 실행합니다.
+
+C-bet 원본 이미지는 Vercel Blob에서 직접 표시합니다. 전체 이미지 이전·재개 명령과 이미지 목록 배포 방법은 [플랍 C-bet 데이터 문서](docs/flop-cbet-data.md#원본-이미지-이전)를 참고하세요.
 
 ## 차트 데이터와 배포
 

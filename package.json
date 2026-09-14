@@ -8,10 +8,11 @@
     "build": "tsc -b && vite build",
     "decrypt": "node scripts/charts-crypto.mjs decrypt",
     "encrypt": "node scripts/charts-crypto.mjs encrypt",
+    "migrate:flop-images": "node scripts/migrate-flop-images.mjs",
     "build:vercel": "npm run decrypt && npm run build",
     "dev:vercel": "vercel dev",
     "lint": "eslint .",
-    "test": "vitest run && node --test scripts/charts-crypto.test.mjs",
+    "test": "vitest run && node --test scripts/charts-crypto.test.mjs scripts/migrate-flop-images.test.mjs",
     "test:watch": "vitest",
     "preview": "vite preview"
   },
