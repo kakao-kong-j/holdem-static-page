@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { betSizeLabel, formatFrequency, type FlopCbetRecord } from '../data/flopCbet';
 
 export function FlopSourceModal({ record, cards, onClose }: {
@@ -9,12 +9,6 @@ export function FlopSourceModal({ record, cards, onClose }: {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
-  const source = record.source.url ? new URL(record.source.url) : null;
-  const fileId = source?.pathname.match(/^\/file\/d\/([\w-]+)\/(?:view|preview)\/?$/)?.[1];
-  if (source && fileId) {
-    source.pathname = `/file/d/${fileId}/preview`;
-    source.searchParams.delete('usp');
-  }
 
   useEffect(() => {
     const dialog = dialogRef.current!;
@@ -47,12 +41,52 @@ export function FlopSourceModal({ record, cards, onClose }: {
           <button ref={closeRef} type="button" aria-label="이미지 닫기" onClick={onClose}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-700 text-lg text-gray-300 hover:bg-gray-800 focus-visible:outline-2 focus-visible:outline-indigo-400">×</button>
         </header>
-        {source && fileId ? <iframe src={source.href} title={`${cards.join(' ')} 원본 이미지 미리보기`}
-          sandbox="allow-scripts allow-same-origin" referrerPolicy="no-referrer"
-          className="min-h-0 w-full flex-1 border-0 bg-gray-900" />
-          : <p role="alert" className="flex-1 p-6 text-sm text-gray-400">이 원본 링크는 미리보기를 지원하지 않습니다.</p>}
-        <p className="shrink-0 border-t border-gray-800 px-4 py-2.5 text-xs text-gray-500">이미지가 보이지 않으면 원본 Google Drive 공유 권한을 확인해 주세요.</p>
+        <SourceImage key={record.source.url} source={record.source.url} alt={`${cards.join(' ')} 원본 이미지`} />
       </div>
     </dialog>
+  );
+}
+
+function SourceImage({ source, alt }: { source: string | null; alt: string }) {
+  const [attempt, setAttempt] = useState(0);
+  const [url, setUrl] = useState<string | null>(null);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+
+  useEffect(() => {
+    const controller = new AbortController();
+    async function load() {
+      try {
+        const fileId = source && new URL(source).pathname.match(/^\/file\/d\/([\w-]+)\/(?:view|preview)\/?$/)?.[1];
+        if (!fileId) throw new Error('Missing source');
+        const response = await fetch(`${import.meta.env.BASE_URL}flop-cbet-images.json`, { signal: controller.signal });
+        if (!response.ok) throw new Error('Image index unavailable');
+        const manifest = await response.json();
+        const image = manifest?.schema_version === 1 && manifest.images?.[fileId];
+        if (typeof image !== 'string') throw new Error('Image unavailable');
+        const parsed = new URL(image);
+        if (parsed.protocol !== 'https:' || !/^[a-z0-9-]+\.public\.blob\.vercel-storage\.com$/.test(parsed.hostname)
+          || parsed.username || parsed.password || parsed.port || parsed.search || parsed.hash
+          || parsed.pathname !== `/flop-cbet/${fileId}`) throw new Error('Invalid image URL');
+        if (!controller.signal.aborted) setUrl(image);
+      } catch {
+        if (!controller.signal.aborted) setStatus('error');
+      }
+    }
+    void load();
+    return () => controller.abort();
+  }, [source, attempt]);
+
+  return (
+    <div className="relative flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto bg-gray-900 p-2 sm:p-4">
+      {status === 'loading' && <p role="status" className="p-4 text-sm text-gray-400">이미지 로딩 중...</p>}
+      {status === 'error' ? <div role="alert" className="space-y-3 p-6 text-center text-sm text-gray-300">
+        <p>이미지를 불러오지 못했습니다.</p>
+        <button type="button" className="rounded-lg bg-gray-800 px-4 py-2 text-white" onClick={() => {
+          setUrl(null); setStatus('loading'); setAttempt(value => value + 1);
+        }}>다시 시도</button>
+      </div> : url && <img key={attempt} src={url} alt={alt}
+        onLoad={() => setStatus('ready')} onError={() => setStatus('error')}
+        className="min-h-0 max-w-full flex-1 object-contain" />}
+    </div>
   );
 }

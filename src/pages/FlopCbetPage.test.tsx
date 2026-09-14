@@ -13,6 +13,15 @@ afterEach(() => {
   document.body.replaceChildren();
   vi.unstubAllGlobals();
 });
+const imageUrl = 'https://synthetic.public.blob.vercel-storage.com/flop-cbet/example';
+function mockChartAndImages() {
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => ({
+    ok: true,
+    json: async () => url.endsWith('flop-cbet-images.json')
+      ? { schema_version: 1, images: { example: imageUrl } }
+      : flopCbetFixture(),
+  })));
+}
 async function mount() {
   const container = document.createElement('div');
   document.body.append(container);
@@ -66,17 +75,21 @@ it('searches, sorts and resets both rows and summary, retaining image previews',
 });
 
 it.each(['close-button', 'backdrop', 'escape'])('opens the selected source in a modal and restores focus on %s', async method => {
-  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => flopCbetFixture() })));
+  mockChartAndImages();
   const c = await mount();
   const opener = c.querySelector<HTMLButtonElement>('tbody button[aria-haspopup="dialog"]');
   expect(opener).not.toBeNull();
   opener!.focus();
-  act(() => opener!.click());
+  await act(async () => opener!.click());
   const dialog = c.querySelector<HTMLDialogElement>('dialog')!;
   expect(dialog.open).toBe(true);
   expect(dialog.textContent).toContain('As Ah 7s');
   expect(dialog.textContent).toContain('BTN vs BB');
-  expect(dialog.querySelector('iframe')?.src).toBe('https://drive.google.com/file/d/example/preview');
+  expect(dialog.querySelector('iframe')).toBeNull();
+  expect(dialog.querySelector('img')?.src).toBe(imageUrl);
+  expect(dialog.querySelector('[role="status"]')).not.toBeNull();
+  act(() => dialog.querySelector('img')!.dispatchEvent(new Event('load')));
+  expect(dialog.querySelector('[role="status"]')).toBeNull();
   expect(document.body.style.overflow).toBe('hidden');
   act(() => {
     if (method === 'close-button') dialog.querySelector<HTMLButtonElement>('button[aria-label="이미지 닫기"]')!.click();
@@ -86,6 +99,33 @@ it.each(['close-button', 'backdrop', 'escape'])('opens the selected source in a 
   expect(c.querySelector('dialog')).toBeNull();
   expect(document.body.style.overflow).not.toBe('hidden');
   expect(document.activeElement).toBe(opener);
+  expect(c.querySelectorAll('tbody tr')).toHaveLength(2);
+});
+
+it('retries a failed image without changing the selected chart', async () => {
+  mockChartAndImages();
+  const c = await mount();
+  await act(async () => c.querySelector<HTMLButtonElement>('tbody button[aria-haspopup="dialog"]')!.click());
+  const dialog = c.querySelector('dialog')!;
+  act(() => dialog.querySelector('img')!.dispatchEvent(new Event('error')));
+  expect(dialog.querySelector('[role="alert"]')).not.toBeNull();
+  await act(async () => [...dialog.querySelectorAll('button')].find(b => b.textContent === '다시 시도')!.click());
+  expect(dialog.querySelector('[role="alert"]')).toBeNull();
+  expect(dialog.querySelector('img')?.src).toBe(imageUrl);
+  act(() => dialog.querySelector('img')!.dispatchEvent(new Event('load')));
+  expect(dialog.querySelector('[role="status"]')).toBeNull();
+  expect(dialog.textContent).toContain('As Ah 7s');
+});
+
+it.each(['http', 'missing', 'unsafe'])('shows an image error while preserving charts when the image index is %s', async failure => {
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => url.endsWith('flop-cbet-images.json')
+    ? { ok: failure !== 'http', status: 503, json: async () => ({ schema_version: 1, images: failure === 'missing' ? {} : { example: 'https://evil.test/image' } }) }
+    : { ok: true, json: async () => flopCbetFixture() }));
+  const c = await mount();
+  await act(async () => c.querySelector<HTMLButtonElement>('tbody button[aria-haspopup="dialog"]')!.click());
+  expect(c.querySelector('dialog [role="alert"]')).not.toBeNull();
+  expect(c.querySelector('dialog img')).toBeNull();
+  expect(c.querySelector('iframe')).toBeNull();
   expect(c.querySelectorAll('tbody tr')).toHaveLength(2);
 });
 
